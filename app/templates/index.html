@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fake Store — Customers & Orders</title>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --surface2: #334155; --border: #475569;
+    --text: #f1f5f9; --text2: #94a3b8; --accent: #3b82f6; --accent2: #2563eb;
+    --green: #22c55e; --red: #ef4444; --orange: #f59e0b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* Header */
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .header h1 { font-size: 1.25rem; font-weight: 600; }
+  .header h1 span { color: var(--accent); }
+  .stats { display: flex; gap: 20px; }
+  .stat { text-align: center; }
+  .stat-num { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+  .stat-label { font-size: 0.75rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* Tabs */
+  .tabs { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; }
+  .tab { padding: 12px 20px; cursor: pointer; color: var(--text2); font-weight: 500; border-bottom: 2px solid transparent; transition: all 0.2s; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* Main */
+  .main { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .card-header h2 { font-size: 1rem; font-weight: 600; }
+  .card-body { padding: 20px; }
+
+  /* Forms */
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 0.75rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; }
+  .field input, .field select { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.875rem; }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
+
+  /* Buttons */
+  .btn { padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 0.875rem; cursor: pointer; border: none; transition: all 0.2s; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-secondary { background: var(--surface2); color: var(--text); }
+  .btn-secondary:hover { background: var(--border); }
+  .btn-danger { background: var(--red); color: white; }
+  .btn-danger:hover { background: #dc2626; }
+  .btn-success { background: var(--green); color: white; }
+  .btn-success:hover { background: #16a34a; }
+  .btn-orange { background: var(--orange); color: white; }
+  .btn-orange:hover { background: #d97706; }
+  .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn-sm { padding: 4px 10px; font-size: 0.75rem; }
+
+  /* Search */
+  .search-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+  .search-bar input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; color: var(--text); font-size: 0.875rem; }
+  .search-bar input:focus { outline: none; border-color: var(--accent); }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 10px 12px; font-size: 0.75rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); }
+  td { padding: 10px 12px; font-size: 0.875rem; border-bottom: 1px solid var(--border); }
+  tr:hover { background: var(--surface2); }
+
+  /* Badge */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; }
+  .badge-blue { background: #1e3a5f; color: #60a5fa; }
+  .badge-green { background: #14532d; color: #4ade80; }
+  .badge-orange { background: #78350f; color: #fbbf24; }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 8px; color: white; font-weight: 500; font-size: 0.875rem; z-index: 1000; animation: slideIn 0.3s ease; }
+  .toast-success { background: var(--green); }
+  .toast-error { background: var(--red); }
+  @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  /* Hidden */
+  .hidden { display: none !important; }
+
+  /* Product chips */
+  .product-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: var(--surface2); border-radius: 16px; font-size: 0.8rem; margin: 2px; }
+  .product-chip .qty { color: var(--accent); font-weight: 600; }
+
+  /* Order total */
+  .order-total { font-weight: 700; color: var(--green); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🛒 <span>Fake Store</span> — Customers & Orders</h1>
+  <div class="stats" id="stats"></div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="customers">👤 Customers</div>
+  <div class="tab" data-tab="orders">📦 Orders</div>
+  <div class="tab" data-tab="batch">⚡ Batch Create</div>
+</div>
+
+<div class="main">
+
+  <!-- CUSTOMERS TAB -->
+  <div id="tab-customers">
+    <div class="search-bar">
+      <input type="text" id="customer-search" placeholder="Search customers by name, email, username...">
+      <button class="btn btn-secondary" onclick="searchCustomers()">🔍 Search</button>
+      <button class="btn btn-primary" onclick="showCustomerForm()">+ New Customer</button>
+    </div>
+
+    <div id="customer-form" class="card hidden">
+      <div class="card-header">
+        <h2 id="customer-form-title">New Customer</h2>
+        <button class="btn btn-secondary btn-sm" onclick="hideCustomerForm()">✕ Cancel</button>
+      </div>
+      <div class="card-body">
+        <input type="hidden" id="cf-id">
+        <div class="form-grid">
+          <div class="field"><label>First Name</label><input id="cf-firstname" placeholder="John"></div>
+          <div class="field"><label>Last Name</label><input id="cf-lastname" placeholder="Doe"></div>
+          <div class="field"><label>Email</label><input id="cf-email" type="email" placeholder="john@example.com"></div>
+          <div class="field"><label>Username</label><input id="cf-username" placeholder="johnd"></div>
+          <div class="field"><label>Phone</label><input id="cf-phone" placeholder="1-570-236-7033"></div>
+          <div class="field"><label>City</label><input id="cf-city" placeholder="New York"></div>
+          <div class="field"><label>Street</label><input id="cf-street" placeholder="Main St"></div>
+          <div class="field"><label>Number</label><input id="cf-number" type="number" placeholder="123"></div>
+          <div class="field"><label>Zipcode</label><input id="cf-zipcode" placeholder="10001"></div>
+        </div>
+        <div style="margin-top:16px" class="btn-group">
+          <button class="btn btn-primary" onclick="saveCustomer()">💾 Save Customer</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Customers</h2><span id="customer-count"></span></div>
+      <div class="card-body table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Username</th><th>City</th><th>Phone</th><th>Actions</th></tr></thead>
+          <tbody id="customers-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ORDERS TAB -->
+  <div id="tab-orders" class="hidden">
+    <div class="search-bar">
+      <input type="text" id="order-search" placeholder="Search orders by customer name...">
+      <button class="btn btn-secondary" onclick="searchOrders()">🔍 Search</button>
+      <button class="btn btn-primary" onclick="showOrderForm()">+ New Order</button>
+    </div>
+
+    <div id="order-form" class="card hidden">
+      <div class="card-header">
+        <h2>New Order</h2>
+        <button class="btn btn-secondary btn-sm" onclick="hideOrderForm()">✕ Cancel</button>
+      </div>
+      <div class="card-body">
+        <input type="hidden" id="of-id">
+        <div class="form-grid">
+          <div class="field"><label>Customer</label>
+            <select id="of-customer"><option value="">— Select customer —</option></select>
+          </div>
+          <div class="field"><label>Date</label><input id="of-date" type="datetime-local"></div>
+        </div>
+        <div style="margin-top:16px">
+          <h3 style="font-size:0.9rem;margin-bottom:8px;color:var(--text2)">Order Items</h3>
+          <div id="order-items"></div>
+          <div style="margin-top:8px" class="btn-group">
+            <button class="btn btn-secondary btn-sm" onclick="addOrderItem()">+ Add Item</button>
+          </div>
+        </div>
+        <div style="margin-top:16px" class="btn-group">
+          <button class="btn btn-primary" onclick="saveOrder()">💾 Save Order</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Orders</h2><span id="order-count"></span></div>
+      <div class="card-body table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Customer</th><th>Items</th><th>Total</th><th>Actions</th></tr></thead>
+          <tbody id="orders-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- BATCH TAB -->
+  <div id="tab-batch" class="hidden">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div class="card">
+        <div class="card-header"><h2>👤 Batch Create Customers</h2></div>
+        <div class="card-body">
+          <p style="color:var(--text2);margin-bottom:12px">Generate random customers using Faker data.</p>
+          <div class="form-grid" style="grid-template-columns:1fr 1fr">
+            <div class="field"><label>Number of Customers</label><input id="batch-cust-count" type="number" value="10" min="1" max="100"></div>
+          </div>
+          <div style="margin-top:16px" class="btn-group">
+            <button class="btn btn-success" onclick="batchCreateCustomers()">⚡ Generate Customers</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h2>📦 Batch Create Orders</h2></div>
+        <div class="card-body">
+          <p style="color:var(--text2);margin-bottom:12px">Generate random orders with random products and quantities.</p>
+          <div class="form-grid" style="grid-template-columns:1fr 1fr">
+            <div class="field"><label>Number of Orders</label><input id="batch-ord-count" type="number" value="10" min="1" max="100"></div>
+          </div>
+          <div style="margin-top:16px" class="btn-group">
+            <button class="btn btn-orange" onclick="batchCreateOrders()">⚡ Generate Orders</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+      <div class="card-header">
+        <h2>📊 Database Management</h2>
+      </div>
+      <div class="card-body">
+        <p style="color:var(--text2);margin-bottom:12px">Re-seed the database from the Fake Store API to restore original data.</p>
+        <div class="btn-group">
+          <button class="btn btn-danger" onclick="reseedDatabase()">🔄 Re-seed from API</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="batch-log" class="card" style="margin-top:20px">
+      <div class="card-header"><h2>📋 Batch Results</h2></div>
+      <div class="card-body" id="batch-log-body">
+        <p style="color:var(--text2)">No batch operations yet. Use the buttons above to generate data.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+
+// ─── Tabs ───
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelectorAll('[id^="tab-"]').forEach(p => p.classList.add('hidden'));
+    document.getElementById('tab-' + tab.dataset.tab).classList.remove('hidden');
+    if (tab.dataset.tab === 'orders') loadOrders();
+  });
+});
+
+// ─── Toast ───
+function toast(msg, type='success') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+// ─── Stats ───
+async function loadStats() {
+  const r = await fetch(API + '/api/stats');
+  const s = await r.json();
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="stat-num">${s.customers}</div><div class="stat-label">Customers</div></div>
+    <div class="stat"><div class="stat-num">${s.orders}</div><div class="stat-label">Orders</div></div>
+    <div class="stat"><div class="stat-num">${s.products}</div><div class="stat-label">Products</div></div>
+  `;
+}
+
+// ─── Products cache ───
+let productsCache = [];
+async function loadProducts() {
+  if (productsCache.length) return productsCache;
+  const r = await fetch(API + '/api/products');
+  productsCache = await r.json();
+  return productsCache;
+}
+
+// ─── Customers ───
+async function loadCustomers(search='') {
+  const url = search ? API + '/api/customers?search=' + encodeURIComponent(search) : API + '/api/customers';
+  const r = await fetch(url);
+  const customers = await r.json();
+  document.getElementById('customer-count').textContent = `${customers.length} total`;
+  const tbody = document.getElementById('customers-tbody');
+  tbody.innerHTML = customers.map(c => `
+    <tr>
+      <td><strong>${c.firstname} ${c.lastname}</strong></td>
+      <td>${c.email}</td>
+      <td><span class="badge badge-blue">@${c.username}</span></td>
+      <td>${c.city || '—'}</td>
+      <td>${c.phone || '—'}</td>
+      <td class="btn-group">
+        <button class="btn btn-secondary btn-sm" onclick="editCustomer('${c.id}')">✏️ Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteCustomer('${c.id}', '${c.firstname} ${c.lastname}')">🗑️</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function searchCustomers() {
+  loadCustomers(document.getElementById('customer-search').value);
+}
+
+function showCustomerForm() {
+  document.getElementById('customer-form').classList.remove('hidden');
+  ['cf-id','cf-firstname','cf-lastname','cf-email','cf-username','cf-phone','cf-city','cf-street','cf-number','cf-zipcode'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('customer-form-title').textContent = 'New Customer';
+}
+function hideCustomerForm() { document.getElementById('customer-form').classList.add('hidden'); }
+
+async function saveCustomer() {
+  const id = document.getElementById('cf-id').value;
+  const payload = {
+    firstname: document.getElementById('cf-firstname').value,
+    lastname: document.getElementById('cf-lastname').value,
+    email: document.getElementById('cf-email').value,
+    username: document.getElementById('cf-username').value,
+    phone: document.getElementById('cf-phone').value,
+    city: document.getElementById('cf-city').value,
+    street: document.getElementById('cf-street').value,
+    number: parseInt(document.getElementById('cf-number').value) || 0,
+    zipcode: document.getElementById('cf-zipcode').value,
+  };
+  const method = id ? 'PUT' : 'POST';
+  const url = id ? API + '/api/customers/' + id : API + '/api/customers';
+  const r = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+  if (r.ok) { toast(id ? 'Customer updated!' : 'Customer created!'); hideCustomerForm(); loadCustomers(); loadStats(); }
+  else { const e = await r.json(); toast(e.error || 'Error', 'error'); }
+}
+
+async function editCustomer(id) {
+  const r = await fetch(API + '/api/customers/' + id);
+  const c = await r.json();
+  showCustomerForm();
+  document.getElementById('customer-form-title').textContent = 'Edit Customer';
+  document.getElementById('cf-id').value = c.id;
+  document.getElementById('cf-firstname').value = c.firstname;
+  document.getElementById('cf-lastname').value = c.lastname;
+  document.getElementById('cf-email').value = c.email;
+  document.getElementById('cf-username').value = c.username;
+  document.getElementById('cf-phone').value = c.phone || '';
+  document.getElementById('cf-city').value = c.city || '';
+  document.getElementById('cf-street').value = c.street || '';
+  document.getElementById('cf-number').value = c.number || '';
+  document.getElementById('cf-zipcode').value = c.zipcode || '';
+}
+
+async function deleteCustomer(id, name) {
+  if (!confirm(`Delete customer "${name}"? Their orders will also be deleted.`)) return;
+  const r = await fetch(API + '/api/customers/' + id, { method: 'DELETE' });
+  if (r.ok) { toast('Customer deleted!'); loadCustomers(); loadStats(); }
+  else { toast('Error deleting customer', 'error'); }
+}
+
+// ─── Orders ───
+async function loadOrders(search='') {
+  const url = search ? API + '/api/orders?search=' + encodeURIComponent(search) : API + '/api/orders';
+  const r = await fetch(url);
+  const orders = await r.json();
+  const products = await loadProducts();
+  document.getElementById('order-count').textContent = `${orders.length} total`;
+  const tbody = document.getElementById('orders-tbody');
+  tbody.innerHTML = orders.map(o => {
+    const total = (o.products || []).reduce((sum, item) => {
+      const p = products.find(p => p.id === item.product_id);
+      return sum + (p ? p.price * item.quantity : 0);
+    }, 0);
+    const itemChips = (o.products || []).map(item => {
+      const p = products.find(p => p.id === item.product_id);
+      const title = p ? (p.title.length > 25 ? p.title.substring(0,25) + '…' : p.title) : '#' + item.product_id;
+      return `<span class="product-chip">${title} <span class="qty">×${item.quantity}</span></span>`;
+    }).join(' ');
+    return `
+      <tr>
+        <td>${(o.date||'').substring(0,10)}</td>
+        <td>${o.customer_name || o.customer_id.substring(0,8) + '…'}</td>
+        <td>${itemChips}</td>
+        <td class="order-total">$${total.toFixed(2)}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="deleteOrder('${o.id}')">🗑️</button></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function searchOrders() {
+  loadOrders(document.getElementById('order-search').value);
+}
+
+async function showOrderForm() {
+  document.getElementById('order-form').classList.remove('hidden');
+  // Populate customer dropdown
+  const customers = await (await fetch(API + '/api/customers')).json();
+  const sel = document.getElementById('of-customer');
+  sel.innerHTML = '<option value="">— Select customer —</option>' + customers.map(c => `<option value="${c.id}">${c.firstname} ${c.lastname}</option>`).join('');
+  // Set default date
+  document.getElementById('of-date').value = new Date().toISOString().substring(0,16);
+  // Clear items
+  document.getElementById('order-items').innerHTML = '';
+  addOrderItem();
+}
+
+function hideOrderForm() { document.getElementById('order-form').classList.add('hidden'); }
+
+async function addOrderItem() {
+  const products = await loadProducts();
+  const container = document.getElementById('order-items');
+  const idx = container.children.length;
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;align-items:center';
+  div.innerHTML = `
+    <select class="oi-product" style="flex:2;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text);font-size:0.8rem">
+      ${products.map(p => `<option value="${p.id}">${p.title.substring(0,40)} ($${p.price.toFixed(2)})</option>`).join('')}
+    </select>
+    <input type="number" class="oi-qty" value="1" min="1" max="99" style="flex:0.5;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text);font-size:0.875rem">
+    <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">✕</button>
+  `;
+  container.appendChild(div);
+}
+
+async function saveOrder() {
+  const customer_id = document.getElementById('of-customer').value;
+  if (!customer_id) { toast('Select a customer', 'error'); return; }
+  const date = document.getElementById('of-date').value;
+  const items = [];
+  document.querySelectorAll('#order-items > div').forEach(row => {
+    const pid = row.querySelector('.oi-product').value;
+    const qty = parseInt(row.querySelector('.oi-qty').value) || 1;
+    if (pid) items.push({ product_id: parseInt(pid), quantity: qty });
+  });
+  if (!items.length) { toast('Add at least one item', 'error'); return; }
+  const r = await fetch(API + '/api/orders', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ customer_id, date, products: items })
+  });
+  if (r.ok) { toast('Order created!'); hideOrderForm(); loadOrders(); loadStats(); }
+  else { const e = await r.json(); toast(e.error || 'Error', 'error'); }
+}
+
+async function deleteOrder(id) {
+  if (!confirm('Delete this order?')) return;
+  const r = await fetch(API + '/api/orders/' + id, { method: 'DELETE' });
+  if (r.ok) { toast('Order deleted!'); loadOrders(); loadStats(); }
+  else { toast('Error deleting order', 'error'); }
+}
+
+// ─── Batch ───
+async function batchCreateCustomers() {
+  const count = parseInt(document.getElementById('batch-cust-count').value) || 10;
+  const r = await fetch(API + '/api/customers/batch', {
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ count })
+  });
+  if (r.ok) {
+    const customers = await r.json();
+    toast(`Created ${customers.length} customers!`);
+    loadStats();
+    document.getElementById('batch-log-body').innerHTML = `
+      <h3 style="margin-bottom:8px">✅ Generated ${customers.length} Customers</h3>
+      <table><thead><tr><th>Name</th><th>Email</th><th>City</th></tr></thead><tbody>
+      ${customers.slice(0,20).map(c => `<tr><td>${c.firstname} ${c.lastname}</td><td>${c.email}</td><td>${c.city}</td></tr>`).join('')}
+      </tbody></table>
+      ${customers.length > 20 ? '<p style="color:var(--text2);margin-top:8px">…and ' + (customers.length - 20) + ' more</p>' : ''}
+    `;
+  } else { toast('Error creating customers', 'error'); }
+}
+
+async function batchCreateOrders() {
+  const count = parseInt(document.getElementById('batch-ord-count').value) || 10;
+  const r = await fetch(API + '/api/orders/batch', {
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ count })
+  });
+  if (r.ok) {
+    const orders = await r.json();
+    toast(`Created ${orders.length} orders!`);
+    loadStats();
+    document.getElementById('batch-log-body').innerHTML = `
+      <h3 style="margin-bottom:8px">✅ Generated ${orders.length} Orders</h3>
+      <table><thead><tr><th>Customer ID</th><th>Date</th><th>Items</th></tr></thead><tbody>
+      ${orders.slice(0,20).map(o => `<tr><td>${o.customer_id.substring(0,8)}…</td><td>${o.date.substring(0,10)}</td><td>${o.items.length} items</td></tr>`).join('')}
+      </tbody></table>
+      ${orders.length > 20 ? '<p style="color:var(--text2);margin-top:8px">…and ' + (orders.length - 20) + ' more</p>' : ''}
+    `;
+  } else { toast('Error creating orders', 'error'); }
+}
+
+async function reseedDatabase() {
+  if (!confirm('This will delete ALL data and re-seed from the Fake Store API. Continue?')) return;
+  // Delete DB file and reload
+  try {
+    await fetch(API + '/api/reseed', { method: 'POST' });
+  } catch(e) {}
+  toast('Re-seeding… the page will reload in 3 seconds.');
+  setTimeout(() => location.reload(), 3000);
+}
+
+// ─── Init ───
+loadStats();
+loadCustomers();
+</script>
+</body>
+</html>
