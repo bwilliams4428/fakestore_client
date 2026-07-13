@@ -65,19 +65,28 @@ def init_db() -> None:
     rows = db.execute("SELECT id FROM orders WHERE order_number IS NULL ORDER BY created_at").fetchall()
     for i, row in enumerate(rows, 1):
         db.execute("UPDATE orders SET order_number = ? WHERE id = ?", (i, row["id"]))
-    # Generate master API key if none set
+    # Handle master API key
     global MASTER_API_KEY
-    if not MASTER_API_KEY:
+    if MASTER_API_KEY:
+        # Store the env-var key in the DB if not already there
+        key_hash = _hash_key(MASTER_API_KEY)
         existing = db.execute("SELECT key_hash FROM api_keys WHERE label = 'master'").fetchone()
-        if existing:
-            # Key already exists — user must look it up via UI
-            pass
-        else:
-            MASTER_API_KEY = "fsk_" + secrets.token_hex(24)
-            key_hash = hashlib.sha256(MASTER_API_KEY.encode()).hexdigest()
+        if not existing:
+            prefix = MASTER_API_KEY[:8]
             db.execute(
-                "INSERT OR IGNORE INTO api_keys (key_hash, label, created_at) VALUES (?, ?, datetime('now'))",
-                (key_hash, "master"),
+                "INSERT INTO api_keys (key_hash, label, prefix, created_at) VALUES (?, 'master', ?, datetime('now'))",
+                (key_hash, prefix),
+            )
+            db.commit()
+    else:
+        existing = db.execute("SELECT key_hash FROM api_keys WHERE label = 'master'").fetchone()
+        if not existing:
+            MASTER_API_KEY = "fsk_" + secrets.token_hex(24)
+            key_hash = _hash_key(MASTER_API_KEY)
+            prefix = MASTER_API_KEY[:8]
+            db.execute(
+                "INSERT INTO api_keys (key_hash, label, prefix, created_at) VALUES (?, 'master', ?, datetime('now'))",
+                (key_hash, prefix),
             )
             db.commit()
             print(f"\n🔑 Master API Key (save this — it won't be shown again):\n   {MASTER_API_KEY}\n")
@@ -157,9 +166,13 @@ def _hash_key(key: str) -> str:
 
 
 def check_api_key(key: str) -> Optional[dict]:
-    """Validate an API key. Returns the key record if valid, None otherwise."""
+    """Validate an API key. Returns the key record if valid, None otherwise.
+    Also accepts the master API key (set via API_KEY env var)."""
     if not key:
         return None
+    # Check if it's the master key
+    if MASTER_API_KEY and key == MASTER_API_KEY:
+        return {"label": "master", "prefix": key[:8], "key_hash": _hash_key(key)}
     key_hash = _hash_key(key)
     db = get_db()
     row = db.execute(
