@@ -260,9 +260,11 @@
     <div class="card" style="margin-top:20px">
       <div class="card-header"><h2>📊 Database Management</h2></div>
       <div class="card-body">
-        <p style="color:var(--text2);margin-bottom:12px">Re-seed the database from the Fake Store API to restore original data.</p>
-        <div class="btn-group">
-          <button class="btn btn-danger" onclick="reseedDatabase()">🔄 Re-seed from API</button>
+        <p style="color:var(--text2);margin-bottom:12px">Manage your database data. All data persists across app restarts.</p>
+        <div class="btn-group" style="flex-wrap:wrap">
+          <button class="btn btn-danger" onclick="confirmAction('reseedDatabase', 'This will delete ALL data and re-seed from the Fake Store API. Continue?')">🔄 Re-seed from API</button>
+          <button class="btn btn-danger" onclick="confirmAction('deleteAllOrders', 'This will delete ALL orders and order items. Continue?')">🗑️ Delete All Orders</button>
+          <button class="btn btn-danger" onclick="confirmAction('deleteAllCustomers', 'This will delete ALL customers AND their orders. Continue?')">🗑️ Delete All Customers</button>
         </div>
       </div>
     </div>
@@ -304,6 +306,18 @@
     <div style="margin-top:16px" class="btn-group">
       <button class="btn btn-primary" onclick="reassignOrder()">🔗 Reassign</button>
       <button class="btn btn-secondary" onclick="hideReassignModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Action Modal -->
+<div id="confirm-modal" class="modal-overlay hidden" onclick="if(event.target===this)hideConfirmModal()">
+  <div class="modal">
+    <h2>⚠️ Confirm Action</h2>
+    <p style="color:var(--text2);margin-bottom:16px" id="confirm-modal-desc"></p>
+    <div class="btn-group">
+      <button class="btn btn-danger" onclick="executeConfirmedAction()">Yes, Proceed</button>
+      <button class="btn btn-secondary" onclick="hideConfirmModal()">Cancel</button>
     </div>
   </div>
 </div>
@@ -751,10 +765,41 @@ async function batchCreateOrders() {
 }
 
 async function reseedDatabase() {
-  if (!confirm('This will delete ALL data and re-seed from the Fake Store API. Continue?')) return;
   await fetch(API + '/api/reseed', { method: 'POST' });
   toast('Re-seeding… the page will reload in 3 seconds.');
   setTimeout(() => location.reload(), 3000);
+}
+
+async function deleteAllOrders() {
+  const r = await fetch(API + '/api/orders/delete-all', { method: 'POST' });
+  const data = await r.json();
+  toast(`Deleted ${data.deleted} orders`);
+  loadOrders();
+  loadStats();
+}
+
+async function deleteAllCustomers() {
+  const r = await fetch(API + '/api/customers/delete-all', { method: 'POST' });
+  const data = await r.json();
+  toast(`Deleted ${data.deleted} customers (and their orders)`);
+  loadCustomers();
+  loadStats();
+}
+
+let _pendingAction = null;
+function confirmAction(actionFn, message) {
+  _pendingAction = actionFn;
+  document.getElementById('confirm-modal-desc').textContent = message;
+  document.getElementById('confirm-modal').classList.remove('hidden');
+}
+function hideConfirmModal() { document.getElementById('confirm-modal').classList.add('hidden'); }
+async function executeConfirmedAction() {
+  hideConfirmModal();
+  const actions = { reseedDatabase, deleteAllOrders, deleteAllCustomers };
+  if (_pendingAction && actions[_pendingAction]) {
+    await actions[_pendingAction]();
+  }
+  _pendingAction = null;
 }
 
 // ─── Init ───

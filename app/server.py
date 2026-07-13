@@ -39,6 +39,11 @@ def get_db() -> sqlite3.Connection:
 def close_db(exc: BaseException | None = None) -> None:
     db = g.pop("db", None)
     if db is not None:
+        try:
+            db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            db.commit()
+        except Exception:
+            pass
         db.close()
 
 
@@ -637,6 +642,25 @@ def create_app() -> Flask:
         seed_if_empty()
         return jsonify({"status": "ok"})
 
+    @app.route("/api/orders/delete-all", methods=["POST"])
+    def delete_all_orders():
+        db = get_db()
+        count = db.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
+        db.execute("DELETE FROM order_items")
+        db.execute("DELETE FROM orders")
+        db.commit()
+        return jsonify({"deleted": count})
+
+    @app.route("/api/customers/delete-all", methods=["POST"])
+    def delete_all_customers():
+        db = get_db()
+        count = db.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
+        db.execute("DELETE FROM order_items")
+        db.execute("DELETE FROM orders")
+        db.execute("DELETE FROM customers")
+        db.commit()
+        return jsonify({"deleted": count})
+
     # ------------------------------------------------------------------
     # Frontend
     # ------------------------------------------------------------------
@@ -653,4 +677,4 @@ if __name__ == "__main__":
     app = create_app()
     port = int(os.environ.get("PORT", 5001))
     print(f"🛒 Fake Store running at http://localhost:{port}")
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=False)
