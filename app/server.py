@@ -45,6 +45,15 @@ def close_db(exc: BaseException | None = None) -> None:
 def init_db() -> None:
     db = get_db()
     db.executescript(SCHEMA)
+    # Migration: add order_number column if missing (existing DBs)
+    try:
+        db.execute("ALTER TABLE orders ADD COLUMN order_number INTEGER")
+    except sqlite3.OperationalError:
+        pass  # column already exists
+    # Backfill order_number for any existing rows
+    rows = db.execute("SELECT id FROM orders WHERE order_number IS NULL ORDER BY created_at").fetchall()
+    for i, row in enumerate(rows, 1):
+        db.execute("UPDATE orders SET order_number = ? WHERE id = ?", (i, row["id"]))
     db.commit()
 
 
@@ -79,6 +88,7 @@ CREATE TABLE IF NOT EXISTS products (
 
 CREATE TABLE IF NOT EXISTS orders (
     id          TEXT PRIMARY KEY,
+    order_number INTEGER NOT NULL,
     customer_id TEXT NOT NULL REFERENCES customers(id),
     date        TEXT NOT NULL,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
@@ -91,6 +101,12 @@ CREATE TABLE IF NOT EXISTS order_items (
     quantity    INTEGER NOT NULL DEFAULT 1
 );
 """
+
+
+def get_next_order_number(db: sqlite3.Connection) -> int:
+    """Return the next sequential order number."""
+    row = db.execute("SELECT COALESCE(MAX(order_number), 0) + 1 FROM orders").fetchone()
+    return row[0]
 
 
 def row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
@@ -164,9 +180,10 @@ def seed_if_empty() -> None:
         # Map original userId to our seeded customer
         cust_idx = min((c.get("userId", 1) - 1), len(customers) - 1) if customers else 0
         customer_id = customers[cust_idx]["id"] if customers else str(uuid.uuid4())
+        onum = i + 1
         db.execute(
-            "INSERT OR IGNORE INTO orders (id, customer_id, date) VALUES (?, ?, ?)",
-            (cid, customer_id, c.get("date", "")),
+            "INSERT OR IGNORE INTO orders (id, order_number, customer_id, date) VALUES (?, ?, ?, ?)",
+            (cid, onum, customer_id, c.get("date", "")),
         )
         for item in c.get("products", []):
             db.execute(
@@ -447,14 +464,16 @@ def create_app() -> Flask:
         if not customer_ids or not product_ids:
             return jsonify({"error": "Need at least one customer and one product"}), 400
         created = []
+        base_onum = get_next_order_number(db)
         for i in range(count):
             o = generate_fake_order(customer_ids, product_ids)
             # If link_to provided, cycle through those customer IDs
             if link_to and len(link_to) > 0:
                 o["customer_id"] = link_to[i % len(link_to)]
+            o["order_number"] = base_onum + i
             db.execute(
-                "INSERT INTO orders (id, customer_id, date) VALUES (?, ?, ?)",
-                (o["id"], o["customer_id"], o["date"]),
+                "INSERT INTO orders (id, order_number, customer_id, date) VALUES (?, ?, ?, ?)",
+                (o["id"], o["order_number"], o["customer_id"], o["date"]),
             )
             for item in o["items"]:
                 db.execute(
@@ -533,9 +552,10 @@ def create_app() -> Flask:
             return jsonify({"error": "customer_id is required"}), 400
         date = data.get("date") or datetime.now(timezone.utc).isoformat()
         products = data.get("products", data.get("items", []))
+        onum = get_next_order_number(db)
         db.execute(
-            "INSERT INTO orders (id, customer_id, date) VALUES (?, ?, ?)",
-            (oid, customer_id, date),
+            "INSERT INTO orders (id, order_number, customer_id, date) VALUES (?, ?, ?, ?)",
+            (oid, onum, customer_id, date),
         )
         for item in products:
             pid = item.get("product_id") or item.get("productId")

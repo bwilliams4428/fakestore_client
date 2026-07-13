@@ -208,7 +208,7 @@
       <div class="card-header"><h2>Orders</h2><span id="order-count"></span></div>
       <div class="card-body table-wrap">
         <table>
-          <thead><tr><th>Date</th><th>Customer</th><th>Items</th><th>Total</th><th>Actions</th></tr></thead>
+          <thead><tr><th>#</th><th>Date</th><th>Customer</th><th>Items</th><th>Total</th><th>Actions</th></tr></thead>
           <tbody id="orders-tbody"></tbody>
         </table>
       </div>
@@ -391,7 +391,7 @@ async function showCustomerDetail(cid) {
   if (!orders.length) {
     container.innerHTML = '<p style="color:var(--text2)">No orders yet. Use the buttons above to link or create orders.</p>';
   } else {
-    container.innerHTML = `<table><thead><tr><th>Date</th><th>Items</th><th>Total</th><th>Actions</th></tr></thead><tbody>
+    container.innerHTML = `<table><thead><tr><th>#</th><th>Date</th><th>Items</th><th>Total</th><th>Actions</th></tr></thead><tbody>
     ${orders.map(o => {
       const total = (o.products || []).reduce((s, item) => {
         const p = products.find(p => p.id === item.product_id);
@@ -403,6 +403,7 @@ async function showCustomerDetail(cid) {
         return `<span class="product-chip">${title} <span class="qty">×${item.quantity}</span></span>`;
       }).join(' ');
       return `<tr>
+        <td><strong>#${o.order_number || ''}</strong></td>
         <td>${(o.date||'').substring(0,10)}</td>
         <td>${chips}</td>
         <td class="order-total">$${total.toFixed(2)}</td>
@@ -436,7 +437,7 @@ async function showLinkOrderModal() {
   const orders = await (await fetch(API + '/api/orders')).json();
   const sel = document.getElementById('link-order-select');
   sel.innerHTML = '<option value="">— Select an order —</option>' + orders.map(o =>
-    `<option value="${o.id}">${(o.date||'').substring(0,10)} — ${o.customer_name || 'Unknown'} (${(o.products||[]).length} items)</option>`
+    `<option value="${o.id}">#${o.order_number || '?'} ${(o.date||'').substring(0,10)} — ${o.customer_name || 'Unknown'} (${(o.products||[]).length} items)</option>`
   ).join('');
   document.getElementById('link-order-modal').classList.remove('hidden');
 }
@@ -554,6 +555,7 @@ async function loadOrders(search='') {
     }).join(' ');
     return `
       <tr>
+        <td><strong>#${o.order_number || ''}</strong></td>
         <td>${(o.date||'').substring(0,10)}</td>
         <td><span class="badge badge-purple" style="cursor:pointer" onclick="showReassignModal('${o.id}','${o.customer_name || ''}')">${o.customer_name || o.customer_id.substring(0,8) + '…'}</span></td>
         <td>${itemChips}</td>
@@ -729,8 +731,9 @@ async function batchCreateOrders() {
     const modeLabel = mode === 'with_new' ? ' (linked to new customers)' : mode === 'specific' ? ' (linked to selected customers)' : '';
     document.getElementById('batch-log-body').innerHTML = `
       <h3 style="margin-bottom:8px">✅ Generated ${orders.length} Orders${modeLabel}</h3>
-      <table><thead><tr><th>Customer</th><th>Date</th><th>Items</th></tr></thead><tbody>
+      <table><thead><tr><th>#</th><th>Customer</th><th>Date</th><th>Items</th></tr></thead><tbody>
       ${orders.slice(0,20).map(o => `<tr>
+        <td><strong>#${o.order_number || '?'}</strong></td>
         <td>${o.customer_name || o.customer_id.substring(0,8) + '…'}</td>
         <td>${o.date.substring(0,10)}</td>
         <td>${o.items.length} items</td>
