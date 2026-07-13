@@ -369,7 +369,8 @@ def require_api_key():
 # ---------------------------------------------------------------------------
 
 def seed_if_empty() -> None:
-    """Seed products from the live API if the products table is empty."""
+    """Seed products from the live API if the products table is empty.
+    Silently skips if the external API is unavailable."""
     db = get_db()
     db_type = get_db_type()
 
@@ -384,104 +385,124 @@ def seed_if_empty() -> None:
         return
 
     import httpx
-    client = httpx.Client(base_url="https://fakestoreapi.com", timeout=30)
+    try:
+        client = httpx.Client(base_url="https://fakestoreapi.com", timeout=30)
 
-    # Seed products
-    products = client.get("/products").json()
-    for p in products:
-        if db_type == "sqlite":
-            db.execute(
-                """INSERT OR IGNORE INTO products
-                   (id, title, price, description, category, image, rate, count)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (p["id"], p["title"], p["price"], p.get("description", ""),
-                 p.get("category", ""), p.get("image", ""),
-                 p.get("rating", {}).get("rate"), p.get("rating", {}).get("count")),
-            )
-        else:
-            cur = db.cursor()
-            cur.execute(
-                """INSERT INTO products
-                   (id, title, price, description, category, image, rate, count)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                   ON CONFLICT (id) DO NOTHING""",
-                (p["id"], p["title"], p["price"], p.get("description", ""),
-                 p.get("category", ""), p.get("image", ""),
-                 p.get("rating", {}).get("rate"), p.get("rating", {}).get("count")),
-            )
-
-    # Seed customers from users
-    users = client.get("/users").json()
-    for u in users:
-        cid = str(uuid.uuid4())
-        if db_type == "sqlite":
-            db.execute(
-                """INSERT OR IGNORE INTO customers
-                   (id, email, username, password, firstname, lastname, phone,
-                    city, street, number, zipcode, lat, long)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (cid, u.get("email", ""), u.get("username", ""), u.get("password", ""),
-                 u.get("name", {}).get("firstname", ""), u.get("name", {}).get("lastname", ""),
-                 u.get("phone", ""),
-                 u.get("address", {}).get("city", ""), u.get("address", {}).get("street", ""),
-                 u.get("address", {}).get("number", 0), u.get("address", {}).get("zipcode", ""),
-                 u.get("address", {}).get("geolocation", {}).get("lat", ""),
-                 u.get("address", {}).get("geolocation", {}).get("long", "")),
-            )
-        else:
-            cur = db.cursor()
-            cur.execute(
-                """INSERT INTO customers
-                   (id, email, username, password, firstname, lastname, phone,
-                    city, street, number, zipcode, lat, long)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                (cid, u.get("email", ""), u.get("username", ""), u.get("password", ""),
-                 u.get("name", {}).get("firstname", ""), u.get("name", {}).get("lastname", ""),
-                 u.get("phone", ""),
-                 u.get("address", {}).get("city", ""), u.get("address", {}).get("street", ""),
-                 u.get("address", {}).get("number", 0), u.get("address", {}).get("zipcode", ""),
-                 u.get("address", {}).get("geolocation", {}).get("lat", ""),
-                 u.get("address", {}).get("geolocation", {}).get("long", "")),
-            )
-
-    # Seed orders from carts
-    carts = client.get("/carts").json()
-    if db_type == "sqlite":
-        customers = db.execute("SELECT id FROM customers ORDER BY created_at").fetchall()
-    else:
-        cur = db.cursor()
-        cur.execute("SELECT id FROM customers ORDER BY created_at")
-        customers = cur.fetchall()
-
-    for i, c in enumerate(carts):
-        oid = str(uuid.uuid4())
-        cust_idx = min((c.get("userId", 1) - 1), len(customers) - 1) if customers else 0
-        customer_id = customers[cust_idx][0] if customers else str(uuid.uuid4())
-        onum = i + 1
-        if db_type == "sqlite":
-            db.execute(
-                "INSERT OR IGNORE INTO orders (id, order_number, customer_id, date) VALUES (?, ?, ?, ?)",
-                (oid, onum, customer_id, c.get("date", "")),
-            )
-            for item in c.get("products", []):
+        # Seed products
+        resp = client.get("/products")
+        if resp.status_code != 200:
+            print(f"⚠️  Seed API returned status {resp.status_code}, skipping seed")
+            client.close()
+            return
+        products = resp.json()
+        if not isinstance(products, list):
+            print("⚠️  Seed API returned unexpected data, skipping seed")
+            client.close()
+            return
+        for p in products:
+            if db_type == "sqlite":
                 db.execute(
-                    "INSERT INTO order_items (order_id, product_id, quantity) VALUES (?, ?, ?)",
-                    (oid, item["productId"], item["quantity"]),
+                    """INSERT OR IGNORE INTO products
+                       (id, title, price, description, category, image, rate, count)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (p["id"], p["title"], p["price"], p.get("description", ""),
+                     p.get("category", ""), p.get("image", ""),
+                     p.get("rating", {}).get("rate"), p.get("rating", {}).get("count")),
                 )
-        else:
-            cur = db.cursor()
-            cur.execute(
-                "INSERT INTO orders (id, order_number, customer_id, date) VALUES (%s, %s, %s, %s)",
-                (oid, onum, customer_id, c.get("date", "")),
-            )
-            for item in c.get("products", []):
+            else:
+                cur = db.cursor()
                 cur.execute(
-                    "INSERT INTO order_items (order_id, product_id, quantity) VALUES (%s, %s, %s)",
-                    (oid, item["productId"], item["quantity"]),
+                    """INSERT INTO products
+                       (id, title, price, description, category, image, rate, count)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                       ON CONFLICT (id) DO NOTHING""",
+                    (p["id"], p["title"], p["price"], p.get("description", ""),
+                     p.get("category", ""), p.get("image", ""),
+                     p.get("rating", {}).get("rate"), p.get("rating", {}).get("count")),
                 )
 
-    db.commit()
-    client.close()
+        # Seed customers from users
+        resp = client.get("/users")
+        if resp.status_code == 200:
+            users = resp.json()
+            if isinstance(users, list):
+                for u in users:
+                    cid = str(uuid.uuid4())
+                    if db_type == "sqlite":
+                        db.execute(
+                            """INSERT OR IGNORE INTO customers
+                               (id, email, username, password, firstname, lastname, phone,
+                                city, street, number, zipcode, lat, long)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (cid, u.get("email", ""), u.get("username", ""), u.get("password", ""),
+                             u.get("name", {}).get("firstname", ""), u.get("name", {}).get("lastname", ""),
+                             u.get("phone", ""),
+                             u.get("address", {}).get("city", ""), u.get("address", {}).get("street", ""),
+                             u.get("address", {}).get("number", 0), u.get("address", {}).get("zipcode", ""),
+                             u.get("address", {}).get("geolocation", {}).get("lat", ""),
+                             u.get("address", {}).get("geolocation", {}).get("long", "")),
+                        )
+                    else:
+                        cur = db.cursor()
+                        cur.execute(
+                            """INSERT INTO customers
+                               (id, email, username, password, firstname, lastname, phone,
+                                city, street, number, zipcode, lat, long)
+                               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                            (cid, u.get("email", ""), u.get("username", ""), u.get("password", ""),
+                             u.get("name", {}).get("firstname", ""), u.get("name", {}).get("lastname", ""),
+                             u.get("phone", ""),
+                             u.get("address", {}).get("city", ""), u.get("address", {}).get("street", ""),
+                             u.get("address", {}).get("number", 0), u.get("address", {}).get("zipcode", ""),
+                             u.get("address", {}).get("geolocation", {}).get("lat", ""),
+                             u.get("address", {}).get("geolocation", {}).get("long", "")),
+                        )
+
+        # Seed orders from carts
+        resp = client.get("/carts")
+        if resp.status_code == 200:
+            carts = resp.json()
+            if isinstance(carts, list):
+                if db_type == "sqlite":
+                    customers = db.execute("SELECT id FROM customers ORDER BY created_at").fetchall()
+                else:
+                    cur = db.cursor()
+                    cur.execute("SELECT id FROM customers ORDER BY created_at")
+                    customers = cur.fetchall()
+
+                for i, c in enumerate(carts):
+                    oid = str(uuid.uuid4())
+                    cust_idx = min((c.get("userId", 1) - 1), len(customers) - 1) if customers else 0
+                    customer_id = customers[cust_idx][0] if customers else str(uuid.uuid4())
+                    onum = i + 1
+                    if db_type == "sqlite":
+                        db.execute(
+                            "INSERT OR IGNORE INTO orders (id, order_number, customer_id, date) VALUES (?, ?, ?, ?)",
+                            (oid, onum, customer_id, c.get("date", "")),
+                        )
+                        for item in c.get("products", []):
+                            db.execute(
+                                "INSERT INTO order_items (order_id, product_id, quantity) VALUES (?, ?, ?)",
+                                (oid, item["productId"], item["quantity"]),
+                            )
+                    else:
+                        cur = db.cursor()
+                        cur.execute(
+                            "INSERT INTO orders (id, order_number, customer_id, date) VALUES (%s, %s, %s, %s)",
+                            (oid, onum, customer_id, c.get("date", "")),
+                        )
+                        for item in c.get("products", []):
+                            cur.execute(
+                                "INSERT INTO order_items (order_id, product_id, quantity) VALUES (%s, %s, %s)",
+                                (oid, item["productId"], item["quantity"]),
+                            )
+
+        db.commit()
+        client.close()
+        print("✅ Seeded database from Fake Store API")
+    except Exception as e:
+        print(f"⚠️  Failed to seed from Fake Store API: {e}")
+        print("   The app will start with an empty database. Use the 'Re-seed' button later.")
 
 
 # ---------------------------------------------------------------------------
