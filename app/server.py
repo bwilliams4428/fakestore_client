@@ -39,6 +39,8 @@ def get_db() -> sqlite3.Connection:
         g.db.row_factory = sqlite3.Row
         g.db.execute("PRAGMA journal_mode=WAL")
         g.db.execute("PRAGMA foreign_keys=ON")
+        # Ensure schema exists (safe no-op if already created)
+        g.db.executescript(SCHEMA)
     return g.db
 
 
@@ -174,12 +176,16 @@ def check_api_key(key: str) -> Optional[dict]:
     if MASTER_API_KEY and key == MASTER_API_KEY:
         return {"label": "master", "prefix": key[:8], "key_hash": _hash_key(key)}
     key_hash = _hash_key(key)
-    db = get_db()
-    row = db.execute(
-        "SELECT * FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL",
-        (key_hash,),
-    ).fetchone()
-    return row_to_dict(row) if row else None
+    try:
+        db = get_db()
+        row = db.execute(
+            "SELECT * FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL",
+            (key_hash,),
+        ).fetchone()
+        return row_to_dict(row) if row else None
+    except sqlite3.OperationalError:
+        # DB not initialized yet (rare race on first request)
+        return None
 
 
 def require_api_key():
