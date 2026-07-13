@@ -3,18 +3,21 @@
 - Auto-seeds from the live Fake Store API on first run
 - Full CRUD for customers and orders
 - Batch creation with random Faker data
+- API key authentication for external access
 - REST JSON API at /api/*
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
+import secrets
 import sqlite3
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from flask import Flask, g, jsonify, request
+from flask import Flask, g, jsonify, request, session
 from flask_cors import CORS
 
 # ---------------------------------------------------------------------------
@@ -24,6 +27,9 @@ from flask_cors import CORS
 # Resolve DB path — supports Render persistent disk via DATABASE_URL env var
 _DEFAULT_DB = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")), "data", "store.db")
 DB_PATH = os.environ.get("DATABASE_URL", _DEFAULT_DB)
+
+# Master API key — set via env var or auto-generated on first run
+MASTER_API_KEY = os.environ.get("API_KEY", "")
 
 
 def get_db() -> sqlite3.Connection:
@@ -59,6 +65,22 @@ def init_db() -> None:
     rows = db.execute("SELECT id FROM orders WHERE order_number IS NULL ORDER BY created_at").fetchall()
     for i, row in enumerate(rows, 1):
         db.execute("UPDATE orders SET order_number = ? WHERE id = ?", (i, row["id"]))
+    # Generate master API key if none set
+    global MASTER_API_KEY
+    if not MASTER_API_KEY:
+        existing = db.execute("SELECT key_hash FROM api_keys WHERE label = 'master'").fetchone()
+        if existing:
+            # Key already exists — user must look it up via UI
+            pass
+        else:
+            MASTER_API_KEY = "fsk_" + secrets.token_hex(24)
+            key_hash = hashlib.sha256(MASTER_API_KEY.encode()).hexdigest()
+            db.execute(
+                "INSERT OR IGNORE INTO api_keys (key_hash, label, created_at) VALUES (?, ?, datetime('now'))",
+                (key_hash, "master"),
+            )
+            db.commit()
+            print(f"\n🔑 Master API Key (save this — it won't be shown again):\n   {MASTER_API_KEY}\n")
     db.commit()
 
 
@@ -105,6 +127,14 @@ CREATE TABLE IF NOT EXISTS order_items (
     product_id  INTEGER NOT NULL REFERENCES products(id),
     quantity    INTEGER NOT NULL DEFAULT 1
 );
+
+CREATE TABLE IF NOT EXISTS api_keys (
+    key_hash    TEXT PRIMARY KEY,
+    label       TEXT NOT NULL,
+    prefix      TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    revoked_at  TEXT
+);
 """
 
 
@@ -116,6 +146,59 @@ def get_next_order_number(db: sqlite3.Connection) -> int:
 
 def row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     return dict(row)
+
+
+# ---------------------------------------------------------------------------
+# API Key authentication
+# ---------------------------------------------------------------------------
+
+def _hash_key(key: str) -> str:
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+def check_api_key(key: str) -> Optional[dict]:
+    """Validate an API key. Returns the key record if valid, None otherwise."""
+    if not key:
+        return None
+    key_hash = _hash_key(key)
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL",
+        (key_hash,),
+    ).fetchone()
+    return row_to_dict(row) if row else None
+
+
+def require_api_key():
+    """Flask before_request hook: require a valid API key for /api/* routes
+    unless the request comes from the dashboard (session auth)."""
+    # Skip non-API routes
+    if not request.path.startswith("/api/"):
+        return None
+    # Skip login/logout routes (they handle their own auth)
+    if request.path in ("/api/login", "/api/logout"):
+        return None
+    # Skip API key management routes (they use master key / session auth)
+    if request.path.startswith("/api/keys"):
+        return None
+    # Allow if dashboard session is set
+    if session.get("dashboard_auth"):
+        return None
+    # Check Authorization header
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        key = auth[7:].strip()
+    elif auth.startswith("ApiKey "):
+        key = auth[7:].strip()
+    else:
+        # Also accept X-API-Key header
+        key = request.headers.get("X-API-Key", "")
+    if not key:
+        return jsonify({"error": "API key required. Pass via Authorization: Bearer <key> or X-API-Key header."}), 401
+    result = check_api_key(key)
+    if result is None:
+        return jsonify({"error": "Invalid or revoked API key."}), 401
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -251,12 +334,84 @@ def generate_fake_order(customer_ids: list[str], product_ids: list[int]) -> dict
 
 def create_app() -> Flask:
     app = Flask(__name__)
-    CORS(app)
+    app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
+    CORS(app, supports_credentials=True)
     app.teardown_appcontext(close_db)
 
     with app.app_context():
         init_db()
         seed_if_empty()
+
+    # Auth middleware
+    app.before_request(require_api_key)
+
+    # Dashboard login — simple password to access the UI
+    DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "admin")
+
+    @app.route("/api/login", methods=["POST"])
+    def dashboard_login():
+        data = request.get_json(force=True) if request.is_json else {}
+        pw = data.get("password", "")
+        if pw == DASHBOARD_PASSWORD:
+            session["dashboard_auth"] = True
+            return jsonify({"status": "ok"})
+        return jsonify({"error": "Invalid password"}), 401
+
+    @app.route("/api/logout", methods=["POST"])
+    def dashboard_logout():
+        session.pop("dashboard_auth", None)
+        return jsonify({"status": "ok"})
+
+    # ------------------------------------------------------------------
+    # API: Key management (requires master key in X-Master-Key header)
+    # ------------------------------------------------------------------
+
+    @app.route("/api/keys", methods=["GET"])
+    def list_api_keys():
+        # Master key required for key management
+        master = request.headers.get("X-Master-Key", "")
+        if not MASTER_API_KEY or master != MASTER_API_KEY:
+            # Also allow dashboard session
+            if not session.get("dashboard_auth"):
+                return jsonify({"error": "Master key or dashboard login required"}), 401
+        db = get_db()
+        rows = db.execute(
+            "SELECT label, prefix, created_at, revoked_at FROM api_keys ORDER BY created_at DESC"
+        ).fetchall()
+        return jsonify([row_to_dict(r) for r in rows])
+
+    @app.route("/api/keys", methods=["POST"])
+    def create_api_key():
+        master = request.headers.get("X-Master-Key", "")
+        if not MASTER_API_KEY or master != MASTER_API_KEY:
+            if not session.get("dashboard_auth"):
+                return jsonify({"error": "Master key or dashboard login required"}), 401
+        data = request.get_json(force=True) if request.is_json else {}
+        label = data.get("label", "unnamed")
+        raw_key = "fsk_" + secrets.token_hex(24)
+        key_hash = _hash_key(raw_key)
+        prefix = raw_key[:8]
+        db = get_db()
+        db.execute(
+            "INSERT INTO api_keys (key_hash, label, prefix, created_at) VALUES (?, ?, ?, datetime('now'))",
+            (key_hash, label, prefix),
+        )
+        db.commit()
+        return jsonify({"key": raw_key, "label": label, "prefix": prefix}), 201
+
+    @app.route("/api/keys/<prefix>/revoke", methods=["POST"])
+    def revoke_api_key(prefix: str):
+        master = request.headers.get("X-Master-Key", "")
+        if not MASTER_API_KEY or master != MASTER_API_KEY:
+            if not session.get("dashboard_auth"):
+                return jsonify({"error": "Master key or dashboard login required"}), 401
+        db = get_db()
+        row = db.execute("SELECT * FROM api_keys WHERE prefix = ? AND revoked_at IS NULL", (prefix,)).fetchone()
+        if row is None:
+            return jsonify({"error": "Key not found or already revoked"}), 404
+        db.execute("UPDATE api_keys SET revoked_at = datetime('now') WHERE prefix = ?", (prefix,))
+        db.commit()
+        return jsonify({"status": "revoked", "prefix": prefix})
 
     # ------------------------------------------------------------------
     # API: Customers
@@ -629,7 +784,7 @@ def create_app() -> Flask:
         })
 
     # ------------------------------------------------------------------
-    # Reseed
+    # Reseed / bulk delete
     # ------------------------------------------------------------------
 
     @app.route("/api/reseed", methods=["POST"])
