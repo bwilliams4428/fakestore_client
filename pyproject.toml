@@ -17,6 +17,7 @@ dependencies = [
     "flask-cors>=5.0",
     "faker>=30.0",
     "gunicorn>=22.0",
+    "psycopg2-binary>=2.9",
 ]
 
 [project.optional-dependencies]

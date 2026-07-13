@@ -3,7 +3,7 @@ services:
     name: fakestore-api
     runtime: python
     buildCommand: pip install -e .
-    startCommand: gunicorn --chdir app server:create_app\\(\\) --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    startCommand: gunicorn --chdir app wsgi:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
     envVars:
       - key: PYTHON_VERSION
         value: "3.12"
@@ -11,11 +11,9 @@ services:
         generateValue: true
       - key: DASHBOARD_PASSWORD
         value: "admin"
-      - key: DATABASE_URL
-        value: "/opt/render/project/data/store.db"
       - key: API_KEY
         generateValue: true
-    disk:
-      name: fakestore-data
-      mountPath: /opt/render/project/data
-      sizeGB: 1
+      # DATABASE_URL: Set this to your Neon PostgreSQL connection string
+      # e.g. postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require
+      - key: DATABASE_URL
+        sync: false
