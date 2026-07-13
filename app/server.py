@@ -501,16 +501,19 @@ def create_app() -> Flask:
                 """SELECT o.*, c.firstname || ' ' || c.lastname as customer_name
                    FROM orders o
                    JOIN customers c ON o.customer_id = c.id
-                   WHERE c.firstname LIKE ? OR c.lastname LIKE ? OR o.id LIKE ?
-                   ORDER BY o.created_at DESC""",
-                (f"%{search}%",) * 3,
+                   WHERE c.firstname LIKE ? OR c.lastname LIKE ?
+                      OR (c.firstname || ' ' || c.lastname) LIKE ?
+                      OR CAST(o.order_number AS TEXT) LIKE ?
+                      OR o.id LIKE ?
+                   ORDER BY o.order_number DESC""",
+                (f"%{search}%",) * 5,
             ).fetchall()
         else:
             rows = db.execute(
                 """SELECT o.*, c.firstname || ' ' || c.lastname as customer_name
                    FROM orders o
                    JOIN customers c ON o.customer_id = c.id
-                   ORDER BY o.created_at DESC""",
+                   ORDER BY o.order_number DESC""",
             ).fetchall()
         result = []
         for row in rows:

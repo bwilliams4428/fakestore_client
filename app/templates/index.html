@@ -173,8 +173,7 @@
   <!-- ORDERS TAB -->
   <div id="tab-orders" class="hidden">
     <div class="search-bar">
-      <input type="text" id="order-search" placeholder="Search orders by customer name...">
-      <button class="btn btn-secondary" onclick="searchOrders()">🔍</button>
+      <input type="text" id="order-search" placeholder="Search orders by #, customer name..." oninput="liveSearchOrders()">
       <button class="btn btn-primary" onclick="showOrderForm()">+ New Order</button>
     </div>
 
@@ -569,7 +568,11 @@ async function loadOrders(search='') {
   }).join('');
 }
 
-function searchOrders() { loadOrders(document.getElementById('order-search').value); }
+let _orderSearchTimer = null;
+function liveSearchOrders() {
+  clearTimeout(_orderSearchTimer);
+  _orderSearchTimer = setTimeout(() => loadOrders(document.getElementById('order-search').value), 250);
+}
 
 async function showOrderForm() {
   document.getElementById('order-form').classList.remove('hidden');
