@@ -246,14 +246,23 @@ def create_app() -> Flask:
         search = request.args.get("search", "").strip()
         if search:
             rows = db.execute(
-                """SELECT * FROM customers
-                   WHERE firstname LIKE ? OR lastname LIKE ?
-                      OR email LIKE ? OR username LIKE ?
-                   ORDER BY created_at DESC""",
+                """SELECT c.*, COUNT(o.id) as order_count
+                   FROM customers c
+                   LEFT JOIN orders o ON c.id = o.customer_id
+                   WHERE c.firstname LIKE ? OR c.lastname LIKE ?
+                      OR c.email LIKE ? OR c.username LIKE ?
+                   GROUP BY c.id
+                   ORDER BY c.created_at DESC""",
                 (f"%{search}%",) * 4,
             ).fetchall()
         else:
-            rows = db.execute("SELECT * FROM customers ORDER BY created_at DESC").fetchall()
+            rows = db.execute(
+                """SELECT c.*, COUNT(o.id) as order_count
+                   FROM customers c
+                   LEFT JOIN orders o ON c.id = o.customer_id
+                   GROUP BY c.id
+                   ORDER BY c.created_at DESC""",
+            ).fetchall()
         return jsonify([row_to_dict(r) for r in rows])
 
     @app.route("/api/customers/<cid>", methods=["GET"])
@@ -368,6 +377,99 @@ def create_app() -> Flask:
         return jsonify(created), 201
 
     # ------------------------------------------------------------------
+    # API: Customer ↔ Order linking
+    # ------------------------------------------------------------------
+
+    @app.route("/api/customers/<cid>/orders", methods=["GET"])
+    def get_customer_orders(cid: str):
+        """Get all orders for a specific customer."""
+        db = get_db()
+        row = db.execute("SELECT * FROM customers WHERE id = ?", (cid,)).fetchone()
+        if row is None:
+            return jsonify({"error": "Customer not found"}), 404
+        rows = db.execute(
+            """SELECT o.*, c.firstname || ' ' || c.lastname as customer_name
+               FROM orders o
+               JOIN customers c ON o.customer_id = c.id
+               WHERE o.customer_id = ?
+               ORDER BY o.created_at DESC""",
+            (cid,),
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = row_to_dict(r)
+            items = db.execute(
+                "SELECT oi.*, p.title, p.price FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?",
+                (d["id"],),
+            ).fetchall()
+            d["products"] = [row_to_dict(i) for i in items]
+            result.append(d)
+        return jsonify(result)
+
+    @app.route("/api/orders/<oid>/customer", methods=["PUT"])
+    def link_order_to_customer(oid: str):
+        """Reassign an order to a different customer."""
+        data = request.get_json(force=True)
+        customer_id = data.get("customer_id")
+        if not customer_id:
+            return jsonify({"error": "customer_id is required"}), 400
+        db = get_db()
+        order = db.execute("SELECT * FROM orders WHERE id = ?", (oid,)).fetchone()
+        if order is None:
+            return jsonify({"error": "Order not found"}), 404
+        cust = db.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
+        if cust is None:
+            return jsonify({"error": "Customer not found"}), 404
+        db.execute("UPDATE orders SET customer_id = ? WHERE id = ?", (customer_id, oid))
+        db.commit()
+        row = db.execute(
+            """SELECT o.*, c.firstname || ' ' || c.lastname as customer_name
+               FROM orders o JOIN customers c ON o.customer_id = c.id WHERE o.id = ?""",
+            (oid,),
+        ).fetchone()
+        d = row_to_dict(row)
+        items = db.execute(
+            "SELECT oi.*, p.title, p.price FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?",
+            (oid,),
+        ).fetchall()
+        d["products"] = [row_to_dict(i) for i in items]
+        return jsonify(d)
+
+    @app.route("/api/orders/batch", methods=["POST"])
+    def batch_create_orders():
+        body = request.get_json(force=True)
+        count = body.get("count", 5)
+        count = min(max(count, 1), 100)
+        link_to = body.get("link_customer_ids")  # optional: list of customer IDs to assign orders to
+        db = get_db()
+        customer_ids = [r["id"] for r in db.execute("SELECT id FROM customers").fetchall()]
+        product_ids = [r["id"] for r in db.execute("SELECT id FROM products").fetchall()]
+        if not customer_ids or not product_ids:
+            return jsonify({"error": "Need at least one customer and one product"}), 400
+        created = []
+        for i in range(count):
+            o = generate_fake_order(customer_ids, product_ids)
+            # If link_to provided, cycle through those customer IDs
+            if link_to and len(link_to) > 0:
+                o["customer_id"] = link_to[i % len(link_to)]
+            db.execute(
+                "INSERT INTO orders (id, customer_id, date) VALUES (?, ?, ?)",
+                (o["id"], o["customer_id"], o["date"]),
+            )
+            for item in o["items"]:
+                db.execute(
+                    "INSERT INTO order_items (order_id, product_id, quantity) VALUES (?, ?, ?)",
+                    (o["id"], item["product_id"], item["quantity"]),
+                )
+            created.append(o)
+        db.commit()
+        # Enrich with customer names
+        for o in created:
+            cust = db.execute("SELECT firstname, lastname FROM customers WHERE id = ?", (o["customer_id"],)).fetchone()
+            o["customer_name"] = f"{cust['firstname']} {cust['lastname']}" if cust else o["customer_id"][:8]
+        return jsonify(created), 201
+
+    # ------------------------------------------------------------------
     # API: Orders
     # ------------------------------------------------------------------
 
@@ -467,32 +569,6 @@ def create_app() -> Flask:
         db.execute("DELETE FROM orders WHERE id = ?", (oid,))
         db.commit()
         return jsonify(row_to_dict(row))
-
-    @app.route("/api/orders/batch", methods=["POST"])
-    def batch_create_orders():
-        body = request.get_json(force=True)
-        count = body.get("count", 5)
-        count = min(max(count, 1), 100)
-        db = get_db()
-        customer_ids = [r["id"] for r in db.execute("SELECT id FROM customers").fetchall()]
-        product_ids = [r["id"] for r in db.execute("SELECT id FROM products").fetchall()]
-        if not customer_ids or not product_ids:
-            return jsonify({"error": "Need at least one customer and one product"}), 400
-        created = []
-        for _ in range(count):
-            o = generate_fake_order(customer_ids, product_ids)
-            db.execute(
-                "INSERT INTO orders (id, customer_id, date) VALUES (?, ?, ?)",
-                (o["id"], o["customer_id"], o["date"]),
-            )
-            for item in o["items"]:
-                db.execute(
-                    "INSERT INTO order_items (order_id, product_id, quantity) VALUES (?, ?, ?)",
-                    (o["id"], item["product_id"], item["quantity"]),
-                )
-            created.append(o)
-        db.commit()
-        return jsonify(created), 201
 
     # ------------------------------------------------------------------
     # API: Products (read-only)
