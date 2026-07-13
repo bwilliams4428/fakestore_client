@@ -368,9 +368,10 @@ def require_api_key():
 # Seed from Fake Store API
 # ---------------------------------------------------------------------------
 
-def seed_if_empty() -> None:
+def seed_if_empty() -> bool:
     """Seed products from the live API if the products table is empty.
-    Silently skips if the external API is unavailable."""
+    Silently skips if the external API is unavailable.
+    Returns True if seeded, False if skipped or failed."""
     db = get_db()
     db_type = get_db_type()
 
@@ -382,7 +383,7 @@ def seed_if_empty() -> None:
         count = cur.fetchone()[0]
 
     if count > 0:
-        return
+        return True  # already seeded
 
     import httpx
     try:
@@ -393,12 +394,12 @@ def seed_if_empty() -> None:
         if resp.status_code != 200:
             print(f"⚠️  Seed API returned status {resp.status_code}, skipping seed")
             client.close()
-            return
+            return False
         products = resp.json()
         if not isinstance(products, list):
             print("⚠️  Seed API returned unexpected data, skipping seed")
             client.close()
-            return
+            return False
         for p in products:
             if db_type == "sqlite":
                 db.execute(
@@ -500,9 +501,11 @@ def seed_if_empty() -> None:
         db.commit()
         client.close()
         print("✅ Seeded database from Fake Store API")
+        return True
     except Exception as e:
         print(f"⚠️  Failed to seed from Fake Store API: {e}")
         print("   The app will start with an empty database. Use the 'Re-seed' button later.")
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -1112,8 +1115,14 @@ def create_app() -> Flask:
             cur.execute("DELETE FROM customers")
             cur.execute("DELETE FROM products")
         db.commit()
-        seed_if_empty()
-        return jsonify({"status": "ok"})
+        seeded = seed_if_empty()
+        if seeded:
+            db = get_db()
+            def cnt(table):
+                row = db_fetchone(db, f"SELECT COUNT(*) as cnt FROM {table}")
+                return list(row_to_dict(row).values())[0] if row else 0
+            return jsonify({"status": "ok", "customers": cnt("customers"), "products": cnt("products"), "orders": cnt("orders")})
+        return jsonify({"status": "error", "message": "Failed to seed from Fake Store API. The API may be down. Try again later."}), 502
 
     @app.route("/api/orders/delete-all", methods=["POST"])
     def delete_all_orders():

@@ -1094,9 +1094,14 @@ async function batchCreateOrders() {
 }
 
 async function reseedDatabase() {
-  await apiFetch('/api/reseed', {method:'POST'});
-  toast('Re-seeding… the page will reload in 3 seconds.');
-  setTimeout(() => location.reload(), 3000);
+  const r = await apiFetch('/api/reseed', {method:'POST'});
+  const data = await r.json();
+  if (r.ok) {
+    toast(`Re-seeded! ${data.customers} customers, ${data.products} products, ${data.orders} orders`);
+    setTimeout(() => location.reload(), 2000);
+  } else {
+    toast(data.message || 'Re-seed failed. The Fake Store API may be down.', 'error');
+  }
 }
 
 async function deleteAllOrders() {
