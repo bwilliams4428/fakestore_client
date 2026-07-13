@@ -341,12 +341,19 @@ def check_api_key(key: str) -> Optional[dict]:
 def require_api_key():
     """Flask before_request hook: require a valid API key for /api/* routes
     unless the request comes from the dashboard (session auth)."""
+    # Skip non-API routes entirely
     if not request.path.startswith("/api/"):
         return None
+    # Skip login/logout routes (they handle their own auth)
     if request.path in ("/api/login", "/api/logout"):
         return None
+    # Skip health check route (public diagnostic)
+    if request.path == "/api/health":
+        return None
+    # Skip API key management routes (they use master key / session auth)
     if request.path.startswith("/api/keys"):
         return None
+    # Allow if dashboard session is set
     if session.get("dashboard_auth"):
         return None
     auth = request.headers.get("Authorization", "")
@@ -1096,10 +1103,37 @@ def create_app() -> Flask:
             "orders": count_rows("orders"),
             "products": count_rows("products"),
             "order_items": count_rows("order_items"),
+            "db_type": get_db_type(),
         })
 
-    # ------------------------------------------------------------------
-    # Reseed / bulk delete
+    @app.route("/api/health", methods=["GET"])
+    def health():
+        """Diagnostic endpoint — shows DB type and connectivity."""
+        db = get_db()
+        db_type = get_db_type()
+        result = {"db_type": db_type, "database_url": DATABASE_URL[:30] + "..." if DATABASE_URL and DATABASE_URL.startswith("postgresql") else "sqlite"}
+        try:
+            def cnt(table):
+                row = db_fetchone(db, f"SELECT COUNT(*) as cnt FROM {table}")
+                d = row_to_dict(row)
+                return list(d.values())[0] if d else 0
+            result["customers"] = cnt("customers")
+            result["products"] = cnt("products")
+            result["orders"] = cnt("orders")
+            result["db_ok"] = True
+        except Exception as e:
+            result["db_ok"] = False
+            result["db_error"] = str(e)
+        # Test Fake Store API reachability
+        try:
+            import httpx
+            resp = httpx.get("https://fakestoreapi.com/products", timeout=10)
+            result["fakestoreapi_status"] = resp.status_code
+            result["fakestoreapi_ok"] = resp.status_code == 200
+        except Exception as e:
+            result["fakestoreapi_ok"] = False
+            result["fakestoreapi_error"] = str(e)
+        return jsonify(result)
     # ------------------------------------------------------------------
 
     @app.route("/api/reseed", methods=["POST"])
@@ -1122,7 +1156,7 @@ def create_app() -> Flask:
                 row = db_fetchone(db, f"SELECT COUNT(*) as cnt FROM {table}")
                 return list(row_to_dict(row).values())[0] if row else 0
             return jsonify({"status": "ok", "customers": cnt("customers"), "products": cnt("products"), "orders": cnt("orders")})
-        return jsonify({"status": "error", "message": "Failed to seed from Fake Store API. The API may be down. Try again later."}), 502
+        return jsonify({"status": "error", "message": "Failed to seed from Fake Store API. Check /api/health for details."}), 502
 
     @app.route("/api/orders/delete-all", methods=["POST"])
     def delete_all_orders():
