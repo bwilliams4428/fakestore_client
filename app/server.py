@@ -375,10 +375,118 @@ def require_api_key():
 # Seed from Fake Store API
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Embedded fallback seed data (used when Fake Store API is unreachable,
+# e.g. cloud hosts that get 403 Forbidden)
+# ---------------------------------------------------------------------------
+_FALLBACK_PRODUCTS = [
+    {"id": 1, "title": "Fjallraven - Foldsack No. 1 Backpack", "price": 109.95, "description": "Your perfect pack for everyday use and walks in the forest.", "category": "men's clothing", "image": "https://fakestoreapi.com/img/81fPKd-2AYL._AC_SL1500_.jpg", "rate": 3.9, "count": 120},
+    {"id": 2, "title": "Mens Casual Premium Slim Fit T-Shirts", "price": 22.6, "description": "Slim-fitting style, contrast stitching, 60% cotton, 40% polyester.", "category": "men's clothing", "image": "https://fakestoreapi.com/img/71-3HjGNDUL._AC_SY879._SX._UX._SY._UY_.jpg", "rate": 4.1, "count": 259},
+    {"id": 3, "title": "Mens Cotton Jacket", "price": 55.99, "description": "Great outance for outdoor or everyday use.", "category": "men's clothing", "image": "https://fakestoreapi.com/img/71li-ujtlUL._AC_UX679_.jpg", "rate": 4.7, "count": 500},
+    {"id": 4, "title": "Mens Casual Slim Fit", "price": 15.99, "description": "The color could be slightly different.", "category": "men's clothing", "image": "https://fakestoreapi.com/img/71YXzeOuslL._AC_UY879_.jpg", "rate": 2.1, "count": 430},
+    {"id": 5, "title": "John Hardy Women's Gold & Silver Dragon Bracelet", "price": 695, "description": "From our Legends Collection, the Naga was inspired by the mythical water dragon.", "category": "jewelery", "image": "https://fakestoreapi.com/img/71pWzhdJNwL._AC_UL640_QL65_ML3_.jpg", "rate": 4.6, "count": 400},
+    {"id": 6, "title": "Solid Gold Petite Micropave", "price": 168, "description": "Satisfaction Guaranteed.", "category": "jewelery", "image": "https://fakestoreapi.com/img/61sbMiUnoGL._AC_UL640_QL65_ML3_.jpg", "rate": 3.9, "count": 70},
+    {"id": 7, "title": "White Gold Plated Princess", "price": 9.99, "description": "Classic Created Wedding Engagement Ring.", "category": "jewelery", "image": "https://fakestoreapi.com/img/71YAIFU48IL._AC_UL640_QL65_ML3_.jpg", "rate": 3, "count": 400},
+    {"id": 8, "title": "Pierced Owl Rose Gold Plated Stainless Steel Double", "price": 10.99, "description": "Rose Gold Plated Double Flared Tunnel Plug Earrings.", "category": "jewelery", "image": "https://fakestoreapi.com/img/51UDEzMJVpL._AC_UL640_QL65_ML3_.jpg", "rate": 1.9, "count": 100},
+    {"id": 9, "title": "WD 2TB Elements Portable External Hard Drive - USB 3.0", "price": 64, "description": "USB 3.0 and USB 2.0 Compatibility.", "category": "electronics", "image": "https://fakestoreapi.com/img/61IBBVJvSDL._AC_SY879_.jpg", "rate": 3.3, "count": 203},
+    {"id": 10, "title": "SanDisk SSD PLUS 1TB Internal SSD", "price": 109, "description": "Easy upgrade for faster boot up, shutdown, application load and response.", "category": "electronics", "image": "https://fakestoreapi.com/img/61U7T1ko9qL._AC_SX679_.jpg", "rate": 2.9, "count": 470},
+    {"id": 11, "title": "Silicon Power 256GB SSD 3D NAND A55", "price": 109, "description": "3D NAND flash are applied to deliver high transfer speeds.", "category": "electronics", "image": "https://fakestoreapi.com/img/71kWymZ+c+L._AC_SX679_.jpg", "rate": 4.8, "count": 319},
+    {"id": 12, "title": "WD 4TB Gaming Drive Works with Playstation", "price": 114, "description": "Expand your PS4 gaming experience.", "category": "electronics", "image": "https://fakestoreapi.com/img/61mtL65D4cL._AC_SX679_.jpg", "rate": 4.8, "count": 400},
+    {"id": 13, "title": "Acer SB220Q bi 21.5 inches Full HD Monitor", "price": 599, "description": "21.5 inches Full HD (1920 x 1080) IPS Monitor.", "category": "electronics", "image": "https://fakestoreapi.com/img/81QpkIctqPL._AC_SX679_.jpg", "rate": 2.9, "count": 250},
+    {"id": 14, "title": "Samsung 49-Inch CHG90 144Hz Curved Gaming Monitor", "price": 999.99, "description": "49 INCH SUPER ULTRAWIDE 32:9 CURVED GAMING MONITOR.", "category": "electronics", "image": "https://fakestoreapi.com/img/81Zt42iIapL._AC_SX679_.jpg", "rate": 2.2, "count": 140},
+    {"id": 15, "title": "BIYLACLESEN Women's 3-in-1 Snowboard Jacket Winter Coats", "price": 56.99, "description": "Note:The Jackets is US standard size.", "category": "women's clothing", "image": "https://fakestoreapi.com/img/51Y5NI-I5jL._AC_UX679_.jpg", "rate": 2.6, "count": 250},
+    {"id": 16, "title": "Lock and Love Women's Removable Hooded Faux Leather Moto Biker Jacket", "price": 29.95, "description": "100% POLYURETHANE(shell) 100% POLYESTER(lining).", "category": "women's clothing", "image": "https://fakestoreapi.com/img/81XH0e8fefL._AC_UY879_.jpg", "rate": 2.9, "count": 350},
+    {"id": 17, "title": "Rain Jacket Women Windbreaker Striped Climbing Raincoats", "price": 39.99, "description": "Lightweight perfect for trip or casual wear.", "category": "women's clothing", "image": "https://fakestoreapi.com/img/71HblqquZSS._AC_UY879_-2.jpg", "rate": 3.8, "count": 679},
+    {"id": 18, "title": "MBJ Women Solid Short Sleeve Boat Neck V", "price": 9.85, "description": "95% RAYON 5% SPANDEX, Made in USA or Imported.", "category": "women's clothing", "image": "https://fakestoreapi.com/img/71z3kpMAYsL._AC_UY879_.jpg", "rate": 4.7, "count": 130},
+    {"id": 19, "title": "Opna Women's Short Sleeve Moisture", "price": 7.95, "description": "100% Polyester, Machine Wash.", "category": "women's clothing", "image": "https://fakestoreapi.com/img/51eg55uWmdL._AC_UX679_.jpg", "rate": 4.5, "count": 146},
+    {"id": 20, "title": "DANVOUY Womens T Shirt Casual Cotton Short", "price": 12.99, "description": "95%Cotton,5%Spandex, Features: Casual, Short Sleeve.", "category": "women's clothing", "image": "https://fakestoreapi.com/img/61pHAEJ4NML._AC_UX679_.jpg", "rate": 3.6, "count": 145},
+]
+
+_FALLBACK_CUSTOMERS = [
+    {"id": "cust-001", "email": "john@gmail.com", "username": "johnd", "password": "m38rmF$", "firstname": "John", "lastname": "Doe", "phone": "1-570-236-7033", "city": "kilcoole", "street": "new road", "number": 7682, "zipcode": "12926-3874", "lat": "-37.3159", "long": "81.1496"},
+    {"id": "cust-002", "email": "morrison@gmail.com", "username": "mor_2314", "password": "83r5^_", "firstname": "David", "lastname": "Morrison", "phone": "1-570-236-7033", "city": "kilcoole", "street": "new road", "number": 7682, "zipcode": "12926-3874", "lat": "-37.3159", "long": "81.1496"},
+    {"id": "cust-003", "email": "kevin@gmail.com", "username": "kevinryan", "password": "kev0297@", "firstname": "Kevin", "lastname": "Ryan", "phone": "1-678-898-5656", "city": "williamsburg", "street": "hopfot", "number": 7682, "zipcode": "12926-3874", "lat": "-37.3159", "long": "81.1496"},
+    {"id": "cust-004", "email": "don@gmail.com", "username": "donero", "password": "ewedon", "firstname": "Don", "lastname": "Romer", "phone": "1-570-236-7033", "city": "breckenridge", "street": "skye st", "number": 7682, "zipcode": "12926-3874", "lat": "-37.3159", "long": "81.1496"},
+    {"id": "cust-005", "email": "derek@gmail.com", "username": "derek", "password": "jklg*_56", "firstname": "Derek", "lastname": "Powell", "phone": "1-678-898-5656", "city": "san ramon", "street": "victor", "number": 7682, "zipcode": "12926-3874", "lat": "-37.3159", "long": "81.1496"},
+    {"id": "cust-006", "email": "david_r@gmail.com", "username": "david_r", "password": "3478*#54", "firstname": "David", "lastname": "Russell", "phone": "1-678-898-5656", "city": "fayetteville", "street": "daegyu", "number": 7682, "zipcode": "12926-3874", "lat": "-37.3159", "long": "81.1496"},
+    {"id": "cust-007", "email": "miriam@snyder.com", "username": "snyder", "password": "f238&@*", "firstname": "Miriam", "lastname": "Snyder", "phone": "1-678-898-5656", "city": "kidman", "street": "kevin st", "number": 7682, "zipcode": "12926-3874", "lat": "-37.3159", "long": "81.1496"},
+    {"id": "cust-008", "email": "william.hopkins@gmail.com", "username": "hopkins", "password": "kkljk*&^", "firstname": "William", "lastname": "Hopkins", "phone": "1-678-898-5656", "city": "alexandria", "street": "dickinson st", "number": 7682, "zipcode": "12926-3874", "lat": "-37.3159", "long": "81.1496"},
+    {"id": "cust-009", "email": "kate@gmail.com", "username": "kate_h", "password": "kfejk@*_", "firstname": "Kate", "lastname": "Hale", "phone": "1-678-898-5656", "city": "san jose", "street": "ash st", "number": 7682, "zipcode": "12926-3874", "lat": "-37.3159", "long": "81.1496"},
+    {"id": "cust-010", "email": "jade@gmail.com", "username": "jade", "password": "awef98*#", "firstname": "Jade", "lastname": "Cruz", "phone": "1-678-898-5656", "city": "chicago", "street": "block st", "number": 7682, "zipcode": "12926-3874", "lat": "-37.3159", "long": "81.1496"},
+]
+
+_FALLBACK_ORDERS = [
+    {"order_number": 1, "customer_idx": 0, "date": "2020-03-02", "items": [{"productId": 1, "quantity": 4}]},
+    {"order_number": 2, "customer_idx": 1, "date": "2020-01-02", "items": [{"productId": 2, "quantity": 1}, {"productId": 4, "quantity": 5}]},
+    {"order_number": 3, "customer_idx": 2, "date": "2020-03-01", "items": [{"productId": 3, "quantity": 1}, {"productId": 2, "quantity": 3}]},
+    {"order_number": 4, "customer_idx": 3, "date": "2020-01-02", "items": [{"productId": 4, "quantity": 4}, {"productId": 5, "quantity": 2}]},
+    {"order_number": 5, "customer_idx": 4, "date": "2020-03-01", "items": [{"productId": 7, "quantity": 1}, {"productId": 8, "quantity": 1}]},
+    {"order_number": 6, "customer_idx": 5, "date": "2020-02-02", "items": [{"productId": 10, "quantity": 4}, {"productId": 1, "quantity": 2}]},
+    {"order_number": 7, "customer_idx": 6, "date": "2020-01-02", "items": [{"productId": 9, "quantity": 3}, {"productId": 14, "quantity": 1}]},
+]
+
+
+def _insert_seed_data(db, db_type, products, customers, orders):
+    """Insert seed data into the database using the appropriate query style."""
+    cur = db.cursor() if db_type != "sqlite" else None
+    ph = "?" if db_type == "sqlite" else "%s"
+    upsert = "ON CONFLICT (id) DO NOTHING" if db_type != "sqlite" else ""
+    ignore = "OR IGNORE" if db_type == "sqlite" else ""
+
+    for p in products:
+        if db_type == "sqlite":
+            db.execute(
+                f"INSERT {ignore} INTO products (id, title, price, description, category, image, rate, count) VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})",
+                (p["id"], p["title"], p["price"], p.get("description", ""), p.get("category", ""), p.get("image", ""), p.get("rate"), p.get("count")),
+            )
+        else:
+            db.cursor().execute(
+                f"INSERT INTO products (id, title, price, description, category, image, rate, count) VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}) {upsert}",
+                (p["id"], p["title"], p["price"], p.get("description", ""), p.get("category", ""), p.get("image", ""), p.get("rate"), p.get("count")),
+            )
+
+    for c in customers:
+        if db_type == "sqlite":
+            db.execute(
+                f"INSERT {ignore} INTO customers (id, email, username, password, firstname, lastname, phone, city, street, number, zipcode, lat, long) VALUES ({ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph})",
+                (c["id"], c["email"], c["username"], c["password"], c["firstname"], c["lastname"], c["phone"], c["city"], c["street"], c["number"], c["zipcode"], c["lat"], c["long"]),
+            )
+        else:
+            db.cursor().execute(
+                f"INSERT INTO customers (id, email, username, password, firstname, lastname, phone, city, street, number, zipcode, lat, long) VALUES ({ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph}) {upsert}",
+                (c["id"], c["email"], c["username"], c["password"], c["firstname"], c["lastname"], c["phone"], c["city"], c["street"], c["number"], c["zipcode"], c["lat"], c["long"]),
+            )
+
+    for o in orders:
+        oid = str(uuid.uuid4())
+        customer_id = customers[o["customer_idx"]]["id"]
+        if db_type == "sqlite":
+            db.execute(
+                f"INSERT {ignore} INTO orders (id, order_number, customer_id, date) VALUES ({ph}, {ph}, {ph}, {ph})",
+                (oid, o["order_number"], customer_id, o["date"]),
+            )
+            for item in o["items"]:
+                db.execute(
+                    f"INSERT INTO order_items (order_id, product_id, quantity) VALUES ({ph}, {ph}, {ph})",
+                    (oid, item["productId"], item["quantity"]),
+                )
+        else:
+            db.cursor().execute(
+                f"INSERT INTO orders (id, order_number, customer_id, date) VALUES ({ph}, {ph}, {ph}, {ph}) {upsert}",
+                (oid, o["order_number"], customer_id, o["date"]),
+            )
+            for item in o["items"]:
+                db.cursor().execute(
+                    f"INSERT INTO order_items (order_id, product_id, quantity) VALUES ({ph}, {ph}, {ph})",
+                    (oid, item["productId"], item["quantity"]),
+                )
+
+    db.commit()
+
+
 def seed_if_empty() -> bool:
-    """Seed products from the live API if the products table is empty.
-    Silently skips if the external API is unavailable.
-    Returns True if seeded, False if skipped or failed."""
+    """Seed the database. Tries the live API first, falls back to embedded data.
+    Returns True if seeded, False if failed."""
     db = get_db()
     db_type = get_db_type()
 
@@ -392,127 +500,61 @@ def seed_if_empty() -> bool:
     if count > 0:
         return True  # already seeded
 
+    # Try live API first
     import httpx
     try:
-        client = httpx.Client(base_url="https://fakestoreapi.com", timeout=30)
-
-        # Seed products
+        client = httpx.Client(base_url="https://fakestoreapi.com", timeout=15)
         resp = client.get("/products")
-        if resp.status_code != 200:
-            print(f"⚠️  Seed API returned status {resp.status_code}, skipping seed")
-            client.close()
-            return False
-        products = resp.json()
-        if not isinstance(products, list):
-            print("⚠️  Seed API returned unexpected data, skipping seed")
-            client.close()
-            return False
-        for p in products:
-            if db_type == "sqlite":
-                db.execute(
-                    """INSERT OR IGNORE INTO products
-                       (id, title, price, description, category, image, rate, count)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (p["id"], p["title"], p["price"], p.get("description", ""),
-                     p.get("category", ""), p.get("image", ""),
-                     p.get("rating", {}).get("rate"), p.get("rating", {}).get("count")),
-                )
-            else:
-                cur = db.cursor()
-                cur.execute(
-                    """INSERT INTO products
-                       (id, title, price, description, category, image, rate, count)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                       ON CONFLICT (id) DO NOTHING""",
-                    (p["id"], p["title"], p["price"], p.get("description", ""),
-                     p.get("category", ""), p.get("image", ""),
-                     p.get("rating", {}).get("rate"), p.get("rating", {}).get("count")),
-                )
-
-        # Seed customers from users
-        resp = client.get("/users")
         if resp.status_code == 200:
-            users = resp.json()
-            if isinstance(users, list):
-                for u in users:
+            products = resp.json()
+            if isinstance(products, list):
+                resp2 = client.get("/users")
+                users = resp2.json() if resp2.status_code == 200 else []
+                resp3 = client.get("/carts")
+                carts = resp3.json() if resp3.status_code == 200 else []
+
+                # Convert API data to our format
+                customers = []
+                for u in users if isinstance(users, list) else []:
                     cid = str(uuid.uuid4())
-                    if db_type == "sqlite":
-                        db.execute(
-                            """INSERT OR IGNORE INTO customers
-                               (id, email, username, password, firstname, lastname, phone,
-                                city, street, number, zipcode, lat, long)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                            (cid, u.get("email", ""), u.get("username", ""), u.get("password", ""),
-                             u.get("name", {}).get("firstname", ""), u.get("name", {}).get("lastname", ""),
-                             u.get("phone", ""),
-                             u.get("address", {}).get("city", ""), u.get("address", {}).get("street", ""),
-                             u.get("address", {}).get("number", 0), u.get("address", {}).get("zipcode", ""),
-                             u.get("address", {}).get("geolocation", {}).get("lat", ""),
-                             u.get("address", {}).get("geolocation", {}).get("long", "")),
-                        )
-                    else:
-                        cur = db.cursor()
-                        cur.execute(
-                            """INSERT INTO customers
-                               (id, email, username, password, firstname, lastname, phone,
-                                city, street, number, zipcode, lat, long)
-                               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                            (cid, u.get("email", ""), u.get("username", ""), u.get("password", ""),
-                             u.get("name", {}).get("firstname", ""), u.get("name", {}).get("lastname", ""),
-                             u.get("phone", ""),
-                             u.get("address", {}).get("city", ""), u.get("address", {}).get("street", ""),
-                             u.get("address", {}).get("number", 0), u.get("address", {}).get("zipcode", ""),
-                             u.get("address", {}).get("geolocation", {}).get("lat", ""),
-                             u.get("address", {}).get("geolocation", {}).get("long", "")),
-                        )
+                    customers.append({
+                        "id": cid, "email": u.get("email", ""), "username": u.get("username", ""),
+                        "password": u.get("password", ""),
+                        "firstname": u.get("name", {}).get("firstname", ""),
+                        "lastname": u.get("name", {}).get("lastname", ""),
+                        "phone": u.get("phone", ""),
+                        "city": u.get("address", {}).get("city", ""),
+                        "street": u.get("address", {}).get("street", ""),
+                        "number": u.get("address", {}).get("number", 0),
+                        "zipcode": u.get("address", {}).get("zipcode", ""),
+                        "lat": u.get("address", {}).get("geolocation", {}).get("lat", ""),
+                        "long": u.get("address", {}).get("geolocation", {}).get("long", ""),
+                    })
 
-        # Seed orders from carts
-        resp = client.get("/carts")
-        if resp.status_code == 200:
-            carts = resp.json()
-            if isinstance(carts, list):
-                if db_type == "sqlite":
-                    customers = db.execute("SELECT id FROM customers ORDER BY created_at").fetchall()
-                else:
-                    cur = db.cursor()
-                    cur.execute("SELECT id FROM customers ORDER BY created_at")
-                    customers = cur.fetchall()
+                orders = []
+                if isinstance(carts, list) and customers:
+                    for i, c in enumerate(carts):
+                        cust_idx = min((c.get("userId", 1) - 1), len(customers) - 1)
+                        orders.append({
+                            "order_number": i + 1,
+                            "customer_idx": cust_idx,
+                            "date": c.get("date", ""),
+                            "items": c.get("products", []),
+                        })
 
-                for i, c in enumerate(carts):
-                    oid = str(uuid.uuid4())
-                    cust_idx = min((c.get("userId", 1) - 1), len(customers) - 1) if customers else 0
-                    customer_id = customers[cust_idx][0] if customers else str(uuid.uuid4())
-                    onum = i + 1
-                    if db_type == "sqlite":
-                        db.execute(
-                            "INSERT OR IGNORE INTO orders (id, order_number, customer_id, date) VALUES (?, ?, ?, ?)",
-                            (oid, onum, customer_id, c.get("date", "")),
-                        )
-                        for item in c.get("products", []):
-                            db.execute(
-                                "INSERT INTO order_items (order_id, product_id, quantity) VALUES (?, ?, ?)",
-                                (oid, item["productId"], item["quantity"]),
-                            )
-                    else:
-                        cur = db.cursor()
-                        cur.execute(
-                            "INSERT INTO orders (id, order_number, customer_id, date) VALUES (%s, %s, %s, %s)",
-                            (oid, onum, customer_id, c.get("date", "")),
-                        )
-                        for item in c.get("products", []):
-                            cur.execute(
-                                "INSERT INTO order_items (order_id, product_id, quantity) VALUES (%s, %s, %s)",
-                                (oid, item["productId"], item["quantity"]),
-                            )
-
-        db.commit()
+                _insert_seed_data(db, db_type, products, customers, orders)
+                client.close()
+                print("✅ Seeded database from live Fake Store API")
+                return True
         client.close()
-        print("✅ Seeded database from Fake Store API")
-        return True
     except Exception as e:
-        print(f"⚠️  Failed to seed from Fake Store API: {e}")
-        print("   The app will start with an empty database. Use the 'Re-seed' button later.")
-        return False
+        print(f"⚠️  Live API seed failed: {e}")
+
+    # Fallback: use embedded data
+    print("📦 Using embedded fallback data for seeding")
+    _insert_seed_data(db, db_type, _FALLBACK_PRODUCTS, _FALLBACK_CUSTOMERS, _FALLBACK_ORDERS)
+    print("✅ Seeded database from fallback data")
+    return True
 
 
 # ---------------------------------------------------------------------------
