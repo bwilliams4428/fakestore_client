@@ -215,9 +215,54 @@ def row_to_dict(row) -> dict[str, Any]:
     return {}
 
 
+def _needs_migration(db, db_type: str) -> bool:
+    """Detect if the DB has the old schema (id-based PKs) and needs migration."""
+    try:
+        if db_type == "sqlite":
+            row = db.execute("PRAGMA table_info(customers)").fetchall()
+            cols = [r[1] for r in row]
+            # Old schema had 'id' column, new schema has 'email' as PK
+            return "id" in cols and "email" in cols
+        else:
+            cur = db.cursor()
+            cur.execute("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'customers' AND column_name = 'id'
+            """)
+            return cur.fetchone() is not None
+    except Exception:
+        return False
+
+
+def _run_migration(db, db_type: str) -> None:
+    """Drop old tables and let them be recreated with the new schema."""
+    print("🔄 Migrating database: dropping old tables with legacy schema...")
+    if db_type == "sqlite":
+        db.executescript("""
+            DROP TABLE IF EXISTS order_items;
+            DROP TABLE IF EXISTS orders;
+            DROP TABLE IF EXISTS customers;
+            DROP TABLE IF EXISTS products;
+            DROP TABLE IF EXISTS api_keys;
+        """)
+    else:
+        cur = db.cursor()
+        cur.execute("DROP TABLE IF EXISTS order_items")
+        cur.execute("DROP TABLE IF EXISTS orders")
+        cur.execute("DROP TABLE IF EXISTS customers")
+        cur.execute("DROP TABLE IF EXISTS products")
+        cur.execute("DROP TABLE IF EXISTS api_keys")
+        db.commit()
+    print("✅ Old tables dropped — will be recreated with new schema.")
+
+
 def init_db() -> None:
     db = get_db()
     db_type = get_db_type()
+
+    # Check if migration is needed (old schema with 'id' column in customers)
+    if _needs_migration(db, db_type):
+        _run_migration(db, db_type)
 
     if db_type == "sqlite":
         db.executescript(SCHEMA_SQLITE)
