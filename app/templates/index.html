@@ -201,10 +201,13 @@
     <div id="customer-detail" class="card hidden">
       <div class="card-header">
         <h2 id="cd-name">Customer Orders</h2>
-        <button class="btn btn-secondary btn-sm" onclick="hideCustomerDetail()">✕ Close</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="cd-back-btn" class="btn btn-secondary btn-sm hidden" onclick="cdBackToList()">← Back to Orders</button>
+          <button class="btn btn-secondary btn-sm" onclick="hideCustomerDetail()">✕ Close</button>
+        </div>
       </div>
       <div class="card-body">
-        <div style="display:flex;gap:12px;margin-bottom:16px">
+        <div id="cd-actions" style="display:flex;gap:12px;margin-bottom:16px">
           <button class="btn btn-purple btn-sm" onclick="showLinkOrderModal()">🔗 Link Existing Order</button>
           <button class="btn btn-success btn-sm" onclick="batchCreateOrdersForCustomer()">⚡ Create & Link New Order</button>
         </div>
@@ -724,6 +727,8 @@ async function showCustomerDetail(email) {
   const r = await apiFetch('/api/customers/' + encodeURIComponent(email));
   const c = await r.json();
   document.getElementById('cd-name').textContent = `📦 ${c.firstname} ${c.lastname}`;
+  document.getElementById('cd-back-btn').classList.add('hidden');
+  document.getElementById('cd-actions').classList.remove('hidden');
   const orders = await (await apiFetch('/api/customers/' + encodeURIComponent(email) + '/orders')).json();
   const products = await loadProducts();
   const container = document.getElementById('cd-orders');
@@ -741,19 +746,58 @@ async function showCustomerDetail(email) {
         const title = p ? (p.title.length > 20 ? p.title.substring(0,20) + '…' : p.title) : '#' + item.product_id;
         return `<span class="product-chip">${title} <span class="qty">×${item.quantity}</span></span>`;
       }).join(' ');
-      return `<tr>
+      return `<tr style="cursor:pointer" onclick="showOrderDetail(${o.order_number},'${esc(email)}')">
         <td><span class="order-num">#${o.order_number}</span></td>
         <td>${(o.date||'').substring(0,10)}</td>
         <td>${(o.shipped_date||'—').substring(0,10)}</td>
         <td>${chips}</td>
         <td>${(o.delivery_date||'—').substring(0,10)}</td>
         <td class="order-total">$${total.toFixed(2)}</td>
-        <td><button class="btn btn-danger btn-sm" onclick="unlinkOrder(${o.order_number},'${esc(email)}')">✕ Unlink</button></td>
+        <td onclick="event.stopPropagation()"><button class="btn btn-danger btn-sm" onclick="unlinkOrder(${o.order_number},'${esc(email)}')">✕ Unlink</button></td>
       </tr>`;
     }).join('')}
     </tbody></table>`;
   }
   document.getElementById('customer-detail').classList.remove('hidden');
+}
+
+async function showOrderDetail(orderNumber, email) {
+  const r = await apiFetch('/api/orders/' + orderNumber);
+  const o = await r.json();
+  const products = await loadProducts();
+  document.getElementById('cd-name').textContent = `#${o.order_number} — ${o.customer_name || email}`;
+  document.getElementById('cd-back-btn').classList.remove('hidden');
+  document.getElementById('cd-actions').classList.add('hidden');
+  const container = document.getElementById('cd-orders');
+  const total = (o.products || []).reduce((s, item) => {
+    const p = products.find(p => p.id === item.product_id);
+    return s + (p ? p.price * item.quantity : 0);
+  }, 0);
+  const itemsHtml = (o.products || []).map(item => {
+    const p = products.find(p => p.id === item.product_id);
+    const title = p ? p.title : '#' + item.product_id;
+    const subtotal = p ? (p.price * item.quantity).toFixed(2) : '—';
+    return `<tr>
+      <td style="font-weight:600">${title}</td>
+      <td>$${p ? p.price.toFixed(2) : '—'}</td>
+      <td>${item.quantity}</td>
+      <td class="order-total">$${subtotal}</td>
+    </tr>`;
+  }).join('');
+  container.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:20px;font-size:0.9rem">
+      <div><span style="color:var(--text2)">Order #</span><br><strong class="order-num">#${o.order_number}</strong></div>
+      <div><span style="color:var(--text2)">Customer</span><br><strong>${esc(o.customer_name || email)}</strong></div>
+      <div><span style="color:var(--text2)">Date</span><br>${(o.date||'').substring(0,10)}</div>
+      <div><span style="color:var(--text2)">Shipped</span><br>${(o.shipped_date||'—').substring(0,10)}</div>
+      <div><span style="color:var(--text2)">Delivery</span><br>${(o.delivery_date||'—').substring(0,10)}</div>
+      <div><span style="color:var(--text2)">Total</span><br><strong class="order-total">$${total.toFixed(2)}</strong></div>
+    </div>
+    <table><thead><tr><th>Item</th><th>Price</th><th>Qty</th><th>Subtotal</th></tr></thead><tbody>${itemsHtml}</tbody></table>`;
+}
+
+function cdBackToList() {
+  if (selectedCustomerEmail) showCustomerDetail(selectedCustomerEmail);
 }
 
 function hideCustomerDetail() {
