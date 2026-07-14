@@ -152,6 +152,7 @@
   <div class="tab" data-tab="batch">⚡ Batch Create</div>
   <div class="tab" data-tab="keys">🔑 API Keys</div>
   <div class="tab" data-tab="docs">📖 API Docs</div>
+  <div class="tab" data-tab="documentation">📄 Documentation</div>
 </div>
 
 <div class="main">
@@ -550,6 +551,156 @@ curl -X POST http://localhost:5001/api/orders/batch \
       </div>
     </div>
   </div>
+
+  <!-- DOCUMENTATION TAB -->
+  <div id="tab-documentation" class="hidden">
+    <div class="card">
+      <div class="card-header"><h2>📄 Technical Documentation</h2></div>
+      <div class="card-body" style="max-height:80vh;overflow-y:auto">
+
+        <h3 style="color:var(--accent);margin-bottom:8px">Architecture Overview</h3>
+        <p style="color:var(--text2);margin-bottom:16px">Flask backend + single-page HTML/CSS/JS frontend. Dual database support (SQLite local, PostgreSQL production). API key auth for external access, session auth for the dashboard.</p>
+
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:24px;font-size:0.85rem;overflow-x:auto">
+          <pre style="margin:0;white-space:pre;font-size:0.8rem"><code>Browser (index.html)
+  └─ apiFetch() + session cookie
+       │
+       ▼
+Flask Server (app/server.py)
+  ├─ CORS + Sessions middleware
+  ├─ before_request → require_api_key()
+  ├─ Route handlers (customers, orders, products, keys)
+  └─ Database Abstraction Layer
+       ├─ db_fetchone / db_fetchall / db_execute
+       └─ Auto-translates ? → %s for Postgres
+            │
+            ▼
+   ┌─────────────┐     ┌──────────────┐
+   │   SQLite     │     │  PostgreSQL   │
+   │ (local dev)  │     │  (Render)     │
+   └─────────────┘     └──────────────┘</code></pre>
+        </div>
+
+        <h3 style="color:var(--accent);margin-bottom:8px">Data Model</h3>
+        <p style="color:var(--text2);margin-bottom:12px">Five tables with foreign key relationships:</p>
+        <table style="width:100%;margin-bottom:24px">
+          <thead><tr><th>Table</th><th>Primary Key</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><strong>customers</strong></td><td>email (string)</td><td>No integer ID — email is the PK</td></tr>
+            <tr><td><strong>orders</strong></td><td>order_number (5-digit int, starts 10001)</td><td>FK → customers.email</td></tr>
+            <tr><td><strong>order_items</strong></td><td>id (auto-increment)</td><td>FK → orders.order_number, products.id</td></tr>
+            <tr><td><strong>products</strong></td><td>id (integer)</td><td>Read-only — seeded from Fake Store API</td></tr>
+            <tr><td><strong>api_keys</strong></td><td>key_hash (SHA-256)</td><td>Stores hashed keys; prefix for identification</td></tr>
+          </tbody>
+        </table>
+
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:24px;font-size:0.85rem;overflow-x:auto">
+          <pre style="margin:0;white-space:pre;font-size:0.8rem"><code>customers (email PK)
+    │
+    ├── 1:N ── orders (order_number PK)
+    │              │
+    │              └── 1:N ── order_items
+    │                              └── FK → products.id
+    │
+    └── api_keys (key_hash PK)
+
+Cascade: DELETE customer → deletes their orders + items
+Cascade: DELETE order → deletes its items</code></pre>
+        </div>
+
+        <h3 style="color:var(--accent);margin-bottom:8px">Authentication</h3>
+        <p style="color:var(--text2);margin-bottom:12px">Two auth mechanisms, both enforced via <code>before_request</code>:</p>
+
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:24px">
+          <p style="margin:0 0 8px"><strong>1. API Key Auth</strong> — for external API calls</p>
+          <p style="color:var(--text2);margin:0 0 12px;font-size:0.85rem">Three header formats accepted:</p>
+          <pre style="margin:0;font-size:0.8rem"><code>Authorization: Bearer fsk_xxx...
+Authorization: ApiKey fsk_xxx...
+X-API-Key: fsk_xxx...</code></pre>
+          <p style="color:var(--text2);margin:12px 0 0;font-size:0.85rem">Keys are SHA-256 hashed before storage. Master key auto-generated on first run. Create additional keys via <code>POST /api/keys</code>.</p>
+        </div>
+
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:24px">
+          <p style="margin:0 0 8px"><strong>2. Dashboard Session Auth</strong> — for browser access</p>
+          <p style="color:var(--text2);margin:0;font-size:0.85rem">Login via <code>POST /api/login</code> sets a Flask session cookie. Dashboard-authenticated requests skip API key requirement. Password set via <code>DASHBOARD_PASSWORD</code> env var (default: <code>admin</code>).</p>
+        </div>
+
+        <h3 style="color:var(--accent);margin-bottom:8px">Exempt Endpoints (No Auth Required)</h3>
+        <table style="width:100%;margin-bottom:24px">
+          <thead><tr><th>Endpoint</th><th>Reason</th></tr></thead>
+          <tbody>
+            <tr><td><code>POST /api/login</code></td><td>Must be accessible to log in</td></tr>
+            <tr><td><code>POST /api/logout</code></td><td>Must be accessible to log out</td></tr>
+            <tr><td><code>GET /api/health</code></td><td>Health checks need no auth</td></tr>
+            <tr><td><code>/api/keys/*</code></td><td>Requires master key or dashboard session</td></tr>
+            <tr><td>All non-<code>/api/</code> paths</td><td>Static files, HTML templates</td></tr>
+          </tbody>
+        </table>
+
+        <h3 style="color:var(--accent);margin-bottom:8px">API Reference</h3>
+        <table style="width:100%;margin-bottom:24px">
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method method-get">GET</span></td><td>/api/customers</td><td>List customers. <code>?search=</code> filters name/email/username. Returns <code>order_count</code> + <code>order_numbers</code></td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td>/api/customers/:email</td><td>Get single customer with <code>order_numbers</code> array</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td>/api/customers</td><td>Create customer. Required: <code>email</code></td></tr>
+            <tr><td><span class="method method-put">PUT</span></td><td>/api/customers/:email</td><td>Update customer (partial — send only fields to change)</td></tr>
+            <tr><td><span class="method method-delete">DELETE</span></td><td>/api/customers/:email</td><td>Delete customer + cascade orders/items</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td>/api/customers/batch</td><td>Generate N fake customers via Faker. <code>{"count": 10}</code></td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td>/api/customers/delete-all</td><td>Delete ALL customers + their orders</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td>/api/customers/:email/orders</td><td>Get all orders for a customer with product details</td></tr>
+            <tr><td colspan="3" style="border-bottom:2px solid var(--border)"></td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td>/api/orders</td><td>List orders. <code>?search=</code> filters by customer name/email/order #</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td>/api/orders/:order_number</td><td>Get single order with product details + customer name</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td>/api/orders</td><td>Create order. Required: <code>customer_email</code></td></tr>
+            <tr><td><span class="method method-delete">DELETE</span></td><td>/api/orders/:order_number</td><td>Delete order + its items</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td>/api/orders/batch</td><td>Generate N fake orders. <code>{"count": 5, "link_customer_emails": [...]}</code></td></tr>
+            <tr><td><span class="method method-put">PUT</span></td><td>/api/orders/:order_number/customer</td><td>Reassign order to different customer</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td>/api/orders/delete-all</td><td>Delete ALL orders</td></tr>
+            <tr><td colspan="3" style="border-bottom:2px solid var(--border)"></td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td>/api/products</td><td>List all products (read-only)</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td>/api/products/:id</td><td>Get single product</td></tr>
+            <tr><td colspan="3" style="border-bottom:2px solid var(--border)"></td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td>/api/keys</td><td>List API keys (master key or dashboard session required)</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td>/api/keys</td><td>Create new key. <code>{"label": "my-key"}</code></td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td>/api/keys/:prefix/revoke</td><td>Revoke a key</td></tr>
+            <tr><td colspan="3" style="border-bottom:2px solid var(--border)"></td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td>/api/stats</td><td>Counts: customers, orders, products, order_items, db_type</td></tr>
+            <tr><td><span class="method method-get">GET</span></td><td>/api/health</td><td>Health check: DB status, Fake Store API connectivity</td></tr>
+            <tr><td><span class="method method-post">POST</span></td><td>/api/reseed</td><td>Delete all data and re-seed from Fake Store API</td></tr>
+          </tbody>
+        </table>
+
+        <h3 style="color:var(--accent);margin-bottom:8px">Seeding & Data Generation</h3>
+        <p style="color:var(--text2);margin-bottom:12px">On first startup, if the products table is empty:</p>
+        <ol style="color:var(--text2);margin-bottom:16px;padding-left:20px;font-size:0.9rem">
+          <li><strong>Live API</strong> — Fetches products, users (→ customers), and carts (→ orders) from <code>https://fakestoreapi.com</code></li>
+          <li><strong>Fallback</strong> — If the API is down, uses embedded arrays (20 products, 10 customers, 7 orders)</li>
+        </ol>
+        <p style="color:var(--text2);margin-bottom:16px;font-size:0.9rem">Batch endpoints use <strong>Faker</strong> to generate realistic random data: names, emails, addresses, and order line items with random products and quantities.</p>
+
+        <h3 style="color:var(--accent);margin-bottom:8px">Schema Migration</h3>
+        <p style="color:var(--text2);margin-bottom:12px;font-size:0.9rem">On startup, <code>_needs_migration()</code> checks for the old schema (integer <code>id</code> column in customers). If detected, all tables are dropped and recreated with the new schema (email-based PK), then re-seeded.</p>
+
+        <h3 style="color:var(--accent);margin-bottom:8px">Deployment</h3>
+        <table style="width:100%;margin-bottom:16px">
+          <thead><tr><th>Setting</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Platform</td><td>Render (free tier)</td></tr>
+            <tr><td>Start command</td><td><code>gunicorn app.server:create_app()</code></td></tr>
+            <tr><td>DATABASE_URL</td><td>PostgreSQL (auto-provisioned by Render)</td></tr>
+            <tr><td>DASHBOARD_PASSWORD</td><td>Env var (default: <code>admin</code>)</td></tr>
+            <tr><td>API_KEY</td><td>Optional env var (otherwise auto-generated)</td></tr>
+            <tr><td>Local dev DB</td><td>SQLite at <code>data/store.db</code></td></tr>
+            <tr><td>Dependencies</td><td>Flask, flask-cors, gunicorn, httpx, Faker, psycopg2</td></tr>
+          </tbody>
+        </table>
+
+        <p style="color:var(--text2);font-size:0.85rem">Full documentation: <code>DOCUMENTATION.md</code> in the repo root.</p>
+      </div>
+    </div>
+  </div>
+
 </div>
 </div>
 
