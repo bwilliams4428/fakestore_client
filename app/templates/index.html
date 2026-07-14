@@ -706,7 +706,7 @@ async function loadCustomers(search='') {
     <tr style="cursor:pointer" onclick="showCustomerDetail('${esc(c.email)}')">
       <td><strong>${esc(c.firstname)} ${esc(c.lastname)}</strong></td>
       <td style="font-size:0.8rem">${esc(c.email)}</td>
-      <td>${(c.order_numbers && c.order_numbers.length) ? c.order_numbers.map(n => `<span class="badge badge-cyan" style="margin:1px">#${n}</span>`).join(' ') : '<span style="color:var(--text2)">—</span>'}</td>
+      <td onclick="event.stopPropagation()">${(c.order_numbers && c.order_numbers.length) ? c.order_numbers.map(n => `<span class="badge badge-cyan" style="cursor:pointer;margin:1px" onclick="showOrderDetail(${n},'${esc(c.email)}')">#${n}</span>`).join(' ') : '<span style="color:var(--text2)">—</span>'}</td>
       <td class="btn-group" onclick="event.stopPropagation()">
         <button class="btn btn-secondary btn-sm" onclick="editCustomer('${esc(c.email)}')">✏️</button>
         <button class="btn btn-danger btn-sm" onclick="deleteCustomer('${esc(c.email)}', '${esc(c.firstname)} ${esc(c.lastname)}')">🗑️</button>
