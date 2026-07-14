@@ -84,6 +84,7 @@
   .product-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: var(--surface2); border-radius: 16px; font-size: 0.8rem; margin: 2px; }
   .product-chip .qty { color: var(--accent); font-weight: 600; }
   .order-total { font-weight: 700; color: var(--green); }
+  .order-num { font-weight: 700; color: var(--cyan); font-family: 'SF Mono', 'Fira Code', monospace; }
 
   /* Login overlay */
   .login-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg); z-index: 2000; display: flex; align-items: center; justify-content: center; }
@@ -114,6 +115,11 @@
   .key-label { color: var(--text2); font-size: 0.85rem; }
   .key-date { color: var(--text2); font-size: 0.75rem; }
   .key-revoked { color: var(--red); font-size: 0.75rem; font-weight: 600; }
+
+  /* Modal */
+  .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 1500; display: flex; align-items: center; justify-content: center; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; }
+  .modal h2 { margin-bottom: 16px; }
 </style>
 </head>
 <body>
@@ -151,7 +157,7 @@
   <!-- CUSTOMERS TAB -->
   <div id="tab-customers">
     <div class="search-bar">
-      <input type="text" id="customer-search" placeholder="Search customers by name, email, username...">
+      <input type="text" id="customer-search" placeholder="Search customers by name, email, username..." oninput="liveSearchCustomers()">
       <button class="btn btn-primary" onclick="showCustomerForm()">+ New Customer</button>
     </div>
 
@@ -161,11 +167,11 @@
         <button class="btn btn-secondary btn-sm" onclick="hideCustomerForm()">✕ Cancel</button>
       </div>
       <div class="card-body">
-        <input type="hidden" id="cf-id">
+        <input type="hidden" id="cf-email-orig">
         <div class="form-grid">
           <div class="field"><label>First Name</label><input id="cf-firstname" placeholder="John"></div>
           <div class="field"><label>Last Name</label><input id="cf-lastname" placeholder="Doe"></div>
-          <div class="field"><label>Email</label><input id="cf-email" type="email" placeholder="john@example.com"></div>
+          <div class="field"><label>Email (required)</label><input id="cf-email" type="email" placeholder="john@example.com"></div>
           <div class="field"><label>Username</label><input id="cf-username" placeholder="johnd"></div>
           <div class="field"><label>Phone</label><input id="cf-phone" placeholder="1-570-236-7033"></div>
           <div class="field"><label>City</label><input id="cf-city" placeholder="New York"></div>
@@ -209,7 +215,7 @@
   <!-- ORDERS TAB -->
   <div id="tab-orders" class="hidden">
     <div class="search-bar">
-      <input type="text" id="order-search" placeholder="Search orders by #, customer name..." oninput="liveSearchOrders()">
+      <input type="text" id="order-search" placeholder="Search orders by #, customer name, email..." oninput="liveSearchOrders()">
       <button class="btn btn-primary" onclick="showOrderForm()">+ New Order</button>
     </div>
 
@@ -219,12 +225,13 @@
         <button class="btn btn-secondary btn-sm" onclick="hideOrderForm()">✕ Cancel</button>
       </div>
       <div class="card-body">
-        <input type="hidden" id="of-id">
         <div class="form-grid">
           <div class="field"><label>Customer</label>
             <select id="of-customer"><option value="">— Select customer —</option></select>
           </div>
-          <div class="field"><label>Date</label><input id="of-date" type="datetime-local"></div>
+          <div class="field"><label>Order Date</label><input id="of-date" type="datetime-local"></div>
+          <div class="field"><label>Shipped Date</label><input id="of-shipped" type="date"></div>
+          <div class="field"><label>Delivery Date</label><input id="of-delivery" type="date"></div>
         </div>
         <div style="margin-top:16px">
           <h3 style="font-size:0.9rem;margin-bottom:8px;color:var(--text2)">Order Items</h3>
@@ -243,7 +250,7 @@
       <div class="card-header"><h2>Orders</h2><span id="order-count"></span></div>
       <div class="card-body table-wrap">
         <table>
-          <thead><tr><th>#</th><th>Date</th><th>Customer</th><th>Items</th><th>Total</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Order #</th><th>Date</th><th>Shipped</th><th>Customer</th><th>Items</th><th>Delivery</th><th>Total</th><th>Actions</th></tr></thead>
           <tbody id="orders-tbody"></tbody>
         </table>
       </div>
@@ -366,23 +373,18 @@
             <span class="method method-get">GET</span><span class="endpoint-path">/api/customers</span><span class="endpoint-desc">List all customers</span>
           </div>
           <div class="endpoint-body">
-            <p style="color:var(--text2);margin-bottom:8px">Returns all customers with order counts. Optional <code>?search=term</code> filter.</p>
+            <p style="color:var(--text2);margin-bottom:8px">Returns all customers with order counts. Optional <code>?search=term</code> filter. <strong>Email is the primary key.</strong></p>
             <pre><code>curl http://localhost:5001/api/customers \
-  -H "Authorization: Bearer fsk_YOUR_KEY"
-
-# With search
-curl "http://localhost:5001/api/customers?search=john" \
-  -H "Authorization: Bearer fsk_YOUR_KEY"</code></pre>
-            <p style="color:var(--text2);margin-top:8px"><strong>Response:</strong> Array of customer objects with <code>order_count</code>.</p>
+  -H "Authorization: Bearer ***"</code></pre>
           </div>
         </div>
         <div class="endpoint">
           <div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')">
-            <span class="method method-get">GET</span><span class="endpoint-path">/api/customers/:id</span><span class="endpoint-desc">Get a customer</span>
+            <span class="method method-get">GET</span><span class="endpoint-path">/api/customers/:email</span><span class="endpoint-desc">Get a customer by email</span>
           </div>
           <div class="endpoint-body">
-            <pre><code>curl http://localhost:5001/api/customers/UUID \
-  -H "Authorization: Bearer fsk_YOUR_KEY"</code></pre>
+            <pre><code>curl http://localhost:5001/api/customers/john@gmail.com \
+  -H "Authorization: Bearer ***"</code></pre>
           </div>
         </div>
         <div class="endpoint">
@@ -391,12 +393,12 @@ curl "http://localhost:5001/api/customers?search=john" \
           </div>
           <div class="endpoint-body">
             <pre><code>curl -X POST http://localhost:5001/api/customers \
-  -H "Authorization: Bearer fsk_YOUR_KEY" \
+  -H "Authorization: Bearer ***" \
   -H "Content-Type: application/json" \
   -d '{
+    "email": "jane@example.com",
     "firstname": "Jane",
     "lastname": "Smith",
-    "email": "jane@example.com",
     "username": "janes",
     "phone": "555-0100",
     "city": "Portland",
@@ -408,32 +410,31 @@ curl "http://localhost:5001/api/customers?search=john" \
         </div>
         <div class="endpoint">
           <div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')">
-            <span class="method method-put">PUT</span><span class="endpoint-path">/api/customers/:id</span><span class="endpoint-desc">Update a customer</span>
+            <span class="method method-put">PUT</span><span class="endpoint-path">/api/customers/:email</span><span class="endpoint-desc">Update a customer</span>
           </div>
           <div class="endpoint-body">
-            <pre><code>curl -X PUT http://localhost:5001/api/customers/UUID \
-  -H "Authorization: Bearer fsk_YOUR_KEY" \
+            <pre><code>curl -X PUT http://localhost:5001/api/customers/jane@example.com \
+  -H "Authorization: Bearer ***" \
   -H "Content-Type: application/json" \
-  -d '{"email": "newemail@example.com", "city": "Seattle"}'</code></pre>
-            <p style="color:var(--text2);margin-top:8px">Send only the fields you want to update.</p>
+  -d '{"city": "Seattle"}'</code></pre>
           </div>
         </div>
         <div class="endpoint">
           <div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')">
-            <span class="method method-delete">DELETE</span><span class="endpoint-path">/api/customers/:id</span><span class="endpoint-desc">Delete a customer (and their orders)</span>
+            <span class="method method-delete">DELETE</span><span class="endpoint-path">/api/customers/:email</span><span class="endpoint-desc">Delete a customer (and their orders)</span>
           </div>
           <div class="endpoint-body">
-            <pre><code>curl -X DELETE http://localhost:5001/api/customers/UUID \
-  -H "Authorization: Bearer fsk_YOUR_KEY"</code></pre>
+            <pre><code>curl -X DELETE http://localhost:5001/api/customers/jane@example.com \
+  -H "Authorization: Bearer ***"</code></pre>
           </div>
         </div>
         <div class="endpoint">
           <div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')">
-            <span class="method method-get">GET</span><span class="endpoint-path">/api/customers/:id/orders</span><span class="endpoint-desc">Get customer's orders</span>
+            <span class="method method-get">GET</span><span class="endpoint-path">/api/customers/:email/orders</span><span class="endpoint-desc">Get customer's orders</span>
           </div>
           <div class="endpoint-body">
-            <pre><code>curl http://localhost:5001/api/customers/UUID/orders \
-  -H "Authorization: Bearer fsk_YOUR_KEY"</code></pre>
+            <pre><code>curl http://localhost:5001/api/customers/john@gmail.com/orders \
+  -H "Authorization: Bearer ***"</code></pre>
           </div>
         </div>
 
@@ -443,21 +444,18 @@ curl "http://localhost:5001/api/customers?search=john" \
             <span class="method method-get">GET</span><span class="endpoint-path">/api/orders</span><span class="endpoint-desc">List all orders</span>
           </div>
           <div class="endpoint-body">
-            <p style="color:var(--text2);margin-bottom:8px">Returns all orders with items and customer info. Optional <code>?search=term</code> to filter by customer name or order number.</p>
+            <p style="color:var(--text2);margin-bottom:8px">Returns all orders with items and customer info. <strong>Order number is a 5-digit primary key.</strong> Optional <code>?search=term</code> to filter by customer name, email, or order number.</p>
             <pre><code>curl http://localhost:5001/api/orders \
-  -H "Authorization: Bearer fsk_YOUR_KEY"
-
-curl "http://localhost:5001/api/orders?search=john" \
-  -H "Authorization: Bearer fsk_YOUR_KEY"</code></pre>
+  -H "Authorization: Bearer ***"</code></pre>
           </div>
         </div>
         <div class="endpoint">
           <div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')">
-            <span class="method method-get">GET</span><span class="endpoint-path">/api/orders/:id</span><span class="endpoint-desc">Get an order</span>
+            <span class="method method-get">GET</span><span class="endpoint-path">/api/orders/:order_number</span><span class="endpoint-desc">Get an order by number</span>
           </div>
           <div class="endpoint-body">
-            <pre><code>curl http://localhost:5001/api/orders/UUID \
-  -H "Authorization: Bearer fsk_YOUR_KEY"</code></pre>
+            <pre><code>curl http://localhost:5001/api/orders/10001 \
+  -H "Authorization: Bearer ***"</code></pre>
           </div>
         </div>
         <div class="endpoint">
@@ -466,11 +464,13 @@ curl "http://localhost:5001/api/orders?search=john" \
           </div>
           <div class="endpoint-body">
             <pre><code>curl -X POST http://localhost:5001/api/orders \
-  -H "Authorization: Bearer fsk_YOUR_KEY" \
+  -H "Authorization: Bearer ***" \
   -H "Content-Type: application/json" \
   -d '{
-    "customer_id": "UUID",
+    "customer_email": "john@gmail.com",
     "date": "2024-07-01T12:00:00",
+    "shipped_date": "2024-07-03",
+    "delivery_date": "2024-07-08",
     "products": [
       {"product_id": 1, "quantity": 2},
       {"product_id": 5, "quantity": 1}
@@ -480,22 +480,22 @@ curl "http://localhost:5001/api/orders?search=john" \
         </div>
         <div class="endpoint">
           <div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')">
-            <span class="method method-put">PUT</span><span class="endpoint-path">/api/orders/:id/customer</span><span class="endpoint-desc">Reassign order to different customer</span>
+            <span class="method method-put">PUT</span><span class="endpoint-path">/api/orders/:order_number/customer</span><span class="endpoint-desc">Reassign order to different customer</span>
           </div>
           <div class="endpoint-body">
-            <pre><code>curl -X PUT http://localhost:5001/api/orders/ORDER_UUID/customer \
-  -H "Authorization: Bearer fsk_YOUR_KEY" \
+            <pre><code>curl -X PUT http://localhost:5001/api/orders/10001/customer \
+  -H "Authorization: Bearer ***" \
   -H "Content-Type: application/json" \
-  -d '{"customer_id": "NEW_CUSTOMER_UUID"}'</code></pre>
+  -d '{"customer_email": "jane@example.com"}'</code></pre>
           </div>
         </div>
         <div class="endpoint">
           <div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')">
-            <span class="method method-delete">DELETE</span><span class="endpoint-path">/api/orders/:id</span><span class="endpoint-desc">Delete an order</span>
+            <span class="method method-delete">DELETE</span><span class="endpoint-path">/api/orders/:order_number</span><span class="endpoint-desc">Delete an order</span>
           </div>
           <div class="endpoint-body">
-            <pre><code>curl -X DELETE http://localhost:5001/api/orders/UUID \
-  -H "Authorization: Bearer fsk_YOUR_KEY"</code></pre>
+            <pre><code>curl -X DELETE http://localhost:5001/api/orders/10001 \
+  -H "Authorization: Bearer ***"</code></pre>
           </div>
         </div>
 
@@ -506,16 +506,7 @@ curl "http://localhost:5001/api/orders?search=john" \
           </div>
           <div class="endpoint-body">
             <pre><code>curl http://localhost:5001/api/products \
-  -H "Authorization: Bearer fsk_YOUR_KEY"</code></pre>
-          </div>
-        </div>
-        <div class="endpoint">
-          <div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')">
-            <span class="method method-get">GET</span><span class="endpoint-path">/api/products/:id</span><span class="endpoint-desc">Get a product</span>
-          </div>
-          <div class="endpoint-body">
-            <pre><code>curl http://localhost:5001/api/products/1 \
-  -H "Authorization: Bearer fsk_YOUR_KEY"</code></pre>
+  -H "Authorization: Bearer ***"</code></pre>
           </div>
         </div>
 
@@ -526,7 +517,7 @@ curl "http://localhost:5001/api/orders?search=john" \
           </div>
           <div class="endpoint-body">
             <pre><code>curl -X POST http://localhost:5001/api/customers/batch \
-  -H "Authorization: Bearer fsk_YOUR_KEY" \
+  -H "Authorization: Bearer ***" \
   -H "Content-Type: application/json" \
   -d '{"count": 10}'</code></pre>
           </div>
@@ -538,55 +529,15 @@ curl "http://localhost:5001/api/orders?search=john" \
           <div class="endpoint-body">
             <pre><code># Random customers
 curl -X POST http://localhost:5001/api/orders/batch \
-  -H "Authorization: Bearer fsk_YOUR_KEY" \
+  -H "Authorization: Bearer ***" \
   -H "Content-Type: application/json" \
   -d '{"count": 5}'
 
-# Linked to specific customers
+# Linked to specific customers (by email)
 curl -X POST http://localhost:5001/api/orders/batch \
-  -H "Authorization: Bearer fsk_YOUR_KEY" \
+  -H "Authorization: Bearer ***" \
   -H "Content-Type: application/json" \
-  -d '{"count": 3, "link_customer_ids": ["UUID1", "UUID2"]}'</code></pre>
-          </div>
-        </div>
-        <div class="endpoint">
-          <div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')">
-            <span class="method method-get">GET</span><span class="endpoint-path">/api/stats</span><span class="endpoint-desc">Database statistics</span>
-          </div>
-          <div class="endpoint-body">
-            <pre><code>curl http://localhost:5001/api/stats \
-  -H "Authorization: Bearer fsk_YOUR_KEY"</code></pre>
-          </div>
-        </div>
-
-        <h3 style="margin:24px 0 12px;color:var(--accent)">API Key Management</h3>
-        <div class="endpoint">
-          <div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')">
-            <span class="method method-post">POST</span><span class="endpoint-path">/api/keys</span><span class="endpoint-desc">Generate a new API key</span>
-          </div>
-          <div class="endpoint-body">
-            <pre><code>curl -X POST http://localhost:5001/api/keys \
-  -H "X-Master-Key: YOUR_MASTER_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"label": "my-agent"}'</code></pre>
-          </div>
-        </div>
-        <div class="endpoint">
-          <div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')">
-            <span class="method method-get">GET</span><span class="endpoint-path">/api/keys</span><span class="endpoint-desc">List all API keys</span>
-          </div>
-          <div class="endpoint-body">
-            <pre><code>curl http://localhost:5001/api/keys \
-  -H "X-Master-Key: YOUR_MASTER_KEY"</code></pre>
-          </div>
-        </div>
-        <div class="endpoint">
-          <div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')">
-            <span class="method method-post">POST</span><span class="endpoint-path">/api/keys/:prefix/revoke</span><span class="endpoint-desc">Revoke an API key</span>
-          </div>
-          <div class="endpoint-body">
-            <pre><code>curl -X POST http://localhost:5001/api/keys/fsk_abcde/revoke \
-  -H "X-Master-Key: YOUR_MASTER_KEY"</code></pre>
+  -d '{"count": 3, "link_customer_emails": ["john@gmail.com", "jane@example.com"]}'</code></pre>
           </div>
         </div>
       </div>
@@ -643,8 +594,8 @@ curl -X POST http://localhost:5001/api/orders/batch \
 const API = '';
 let allCustomers = [];
 let allOrders = [];
-let selectedCustomerId = null;
-let selectedOrderId = null;
+let selectedCustomerEmail = null;
+let selectedOrderNumber = null;
 let masterKey = '';
 
 // ─── Auth ───
@@ -653,8 +604,7 @@ async function checkAuth() {
   if (r.ok) {
     document.getElementById('login-overlay').classList.add('hidden');
     document.getElementById('app-container').classList.remove('hidden');
-    loadStats();
-    loadCustomers();
+    loadStats(); loadCustomers();
     return true;
   }
   if (r.status === 401) {
@@ -662,7 +612,6 @@ async function checkAuth() {
     document.getElementById('app-container').classList.add('hidden');
     return false;
   }
-  // Other error — still show app (e.g. server issue)
   document.getElementById('login-overlay').classList.add('hidden');
   document.getElementById('app-container').classList.remove('hidden');
   return true;
@@ -691,7 +640,6 @@ async function doLogout() {
   document.getElementById('login-password').value = '';
 }
 
-// ─── API fetch helper (adds credentials for session auth) ───
 async function apiFetch(url, opts={}) {
   opts.credentials = 'include';
   if (!opts.headers) opts.headers = {};
@@ -749,33 +697,35 @@ async function loadCustomers(search='') {
   const tbody = document.getElementById('customers-tbody');
   tbody.innerHTML = allCustomers.map(c => `
     <tr>
-      <td><strong>${c.firstname} ${c.lastname}</strong></td>
-      <td>${c.email}</td>
-      <td><span class="badge badge-blue">@${c.username}</span></td>
-      <td>${c.city || '—'}</td>
-      <td><span class="badge badge-green" style="cursor:pointer" onclick="showCustomerDetail('${c.id}')">📦 ${c.order_count || 0}</span></td>
+      <td><strong>${esc(c.firstname)} ${esc(c.lastname)}</strong></td>
+      <td>${esc(c.email)}</td>
+      <td><span class="badge badge-blue">@${esc(c.username)}</span></td>
+      <td>${esc(c.city) || '—'}</td>
+      <td><span class="badge badge-green" style="cursor:pointer" onclick="showCustomerDetail('${esc(c.email)}')">📦 ${c.order_count || 0}</span></td>
       <td class="btn-group">
-        <button class="btn btn-purple btn-sm" onclick="showCustomerDetail('${c.id}')">🔗 Orders</button>
-        <button class="btn btn-secondary btn-sm" onclick="editCustomer('${c.id}')">✏️</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteCustomer('${c.id}', '${c.firstname} ${c.lastname}')">🗑️</button>
+        <button class="btn btn-purple btn-sm" onclick="showCustomerDetail('${esc(c.email)}')">🔗 Orders</button>
+        <button class="btn btn-secondary btn-sm" onclick="editCustomer('${esc(c.email)}')">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteCustomer('${esc(c.email)}', '${esc(c.firstname)} ${esc(c.lastname)}')">🗑️</button>
       </td>
     </tr>
   `).join('');
 }
 
+function esc(s) { return (s||'').replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+
 // ─── Customer Detail (linked orders) ───
-async function showCustomerDetail(cid) {
-  selectedCustomerId = cid;
-  const r = await apiFetch('/api/customers/' + cid);
+async function showCustomerDetail(email) {
+  selectedCustomerEmail = email;
+  const r = await apiFetch('/api/customers/' + encodeURIComponent(email));
   const c = await r.json();
   document.getElementById('cd-name').textContent = `📦 Orders for ${c.firstname} ${c.lastname}`;
-  const orders = await (await apiFetch('/api/customers/' + cid + '/orders')).json();
+  const orders = await (await apiFetch('/api/customers/' + encodeURIComponent(email) + '/orders')).json();
   const products = await loadProducts();
   const container = document.getElementById('cd-orders');
   if (!orders.length) {
     container.innerHTML = '<p style="color:var(--text2)">No orders yet.</p>';
   } else {
-    container.innerHTML = `<table><thead><tr><th>#</th><th>Date</th><th>Items</th><th>Total</th><th>Actions</th></tr></thead><tbody>
+    container.innerHTML = `<table><thead><tr><th>Order #</th><th>Date</th><th>Shipped</th><th>Items</th><th>Delivery</th><th>Total</th><th>Actions</th></tr></thead><tbody>
     ${orders.map(o => {
       const total = (o.products || []).reduce((s, item) => {
         const p = products.find(p => p.id === item.product_id);
@@ -787,11 +737,13 @@ async function showCustomerDetail(cid) {
         return `<span class="product-chip">${title} <span class="qty">×${item.quantity}</span></span>`;
       }).join(' ');
       return `<tr>
-        <td><strong>#${o.order_number || ''}</strong></td>
+        <td><span class="order-num">#${o.order_number}</span></td>
         <td>${(o.date||'').substring(0,10)}</td>
+        <td>${(o.shipped_date||'—').substring(0,10)}</td>
         <td>${chips}</td>
+        <td>${(o.delivery_date||'—').substring(0,10)}</td>
         <td class="order-total">$${total.toFixed(2)}</td>
-        <td><button class="btn btn-danger btn-sm" onclick="unlinkOrder('${o.id}','${cid}')">✕ Unlink</button></td>
+        <td><button class="btn btn-danger btn-sm" onclick="unlinkOrder(${o.order_number},'${esc(email)}')">✕ Unlink</button></td>
       </tr>`;
     }).join('')}
     </tbody></table>`;
@@ -802,61 +754,65 @@ async function showCustomerDetail(cid) {
 
 function hideCustomerDetail() { document.getElementById('customer-detail').classList.add('hidden'); }
 
-async function unlinkOrder(oid, cid) {
+async function unlinkOrder(orderNumber, email) {
   if (!confirm('This will delete the order. Continue?')) return;
-  await apiFetch('/api/orders/' + oid, {method:'DELETE'});
+  await apiFetch('/api/orders/' + orderNumber, {method:'DELETE'});
   toast('Order removed');
-  showCustomerDetail(cid); loadStats();
+  showCustomerDetail(email); loadStats();
 }
 
 // ─── Link Order Modal ───
-let linkCustomerId = null;
 async function showLinkOrderModal() {
-  linkCustomerId = selectedCustomerId;
-  const c = await (await apiFetch('/api/customers/' + linkCustomerId)).json();
+  const email = selectedCustomerEmail;
+  const c = await (await apiFetch('/api/customers/' + encodeURIComponent(email))).json();
   document.getElementById('link-order-modal-desc').textContent = `Link an existing order to ${c.firstname} ${c.lastname}`;
   const orders = await (await apiFetch('/api/orders')).json();
   const sel = document.getElementById('link-order-select');
   sel.innerHTML = '<option value="">— Select an order —</option>' + orders.map(o =>
-    `<option value="${o.id}">#${o.order_number || '?'} ${(o.date||'').substring(0,10)} — ${o.customer_name || 'Unknown'} (${(o.products||[]).length} items)</option>`
+    `<option value="${o.order_number}">#${o.order_number} ${(o.date||'').substring(0,10)} — ${o.customer_name || 'Unknown'} (${(o.products||[]).length} items)</option>`
   ).join('');
   document.getElementById('link-order-modal').classList.remove('hidden');
 }
 function hideLinkOrderModal() { document.getElementById('link-order-modal').classList.add('hidden'); }
 
 async function linkOrderToCustomer() {
-  const oid = document.getElementById('link-order-select').value;
-  if (!oid) { toast('Select an order', 'error'); return; }
-  const r = await apiFetch('/api/orders/' + oid + '/customer', {
+  const onum = document.getElementById('link-order-select').value;
+  if (!onum) { toast('Select an order', 'error'); return; }
+  const r = await apiFetch('/api/orders/' + onum + '/customer', {
     method: 'PUT', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({customer_id: linkCustomerId})
+    body: JSON.stringify({customer_email: selectedCustomerEmail})
   });
-  if (r.ok) { toast('Order linked!'); hideLinkOrderModal(); showCustomerDetail(linkCustomerId); loadOrders(); loadStats(); }
+  if (r.ok) { toast('Order linked!'); hideLinkOrderModal(); showCustomerDetail(selectedCustomerEmail); loadOrders(); loadStats(); }
   else { const e = await r.json(); toast(e.error || 'Error', 'error'); }
 }
 
 async function batchCreateOrdersForCustomer() {
-  const cid = selectedCustomerId;
-  if (!cid) return;
+  const email = selectedCustomerEmail;
+  if (!email) return;
   const r = await apiFetch('/api/orders/batch', {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({count: 1, link_customer_ids: [cid]})
+    body: JSON.stringify({count: 1, link_customer_emails: [email]})
   });
-  if (r.ok) { toast('Order created & linked!'); showCustomerDetail(cid); loadStats(); }
+  if (r.ok) { toast('Order created & linked!'); showCustomerDetail(email); loadStats(); }
   else { const e = await r.json(); toast(e.error || 'Error', 'error'); }
 }
 
+let _customerSearchTimer = null;
+function liveSearchCustomers() {
+  clearTimeout(_customerSearchTimer);
+  _customerSearchTimer = setTimeout(() => loadCustomers(document.getElementById('customer-search').value), 250);
+}
 function searchCustomers() { loadCustomers(document.getElementById('customer-search').value); }
 
 function showCustomerForm() {
   document.getElementById('customer-form').classList.remove('hidden');
-  ['cf-id','cf-firstname','cf-lastname','cf-email','cf-username','cf-phone','cf-city','cf-street','cf-number','cf-zipcode'].forEach(id => document.getElementById(id).value = '');
+  ['cf-email-orig','cf-firstname','cf-lastname','cf-email','cf-username','cf-phone','cf-city','cf-street','cf-number','cf-zipcode'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('customer-form-title').textContent = 'New Customer';
 }
 function hideCustomerForm() { document.getElementById('customer-form').classList.add('hidden'); }
 
 async function saveCustomer() {
-  const id = document.getElementById('cf-id').value;
+  const origEmail = document.getElementById('cf-email-orig').value;
   const payload = {
     firstname: document.getElementById('cf-firstname').value,
     lastname: document.getElementById('cf-lastname').value,
@@ -868,19 +824,21 @@ async function saveCustomer() {
     number: parseInt(document.getElementById('cf-number').value) || 0,
     zipcode: document.getElementById('cf-zipcode').value,
   };
-  const method = id ? 'PUT' : 'POST';
-  const url = id ? '/api/customers/' + id : '/api/customers';
+  if (!payload.email) { toast('Email is required', 'error'); return; }
+  const isEdit = origEmail !== '';
+  const method = isEdit ? 'PUT' : 'POST';
+  const url = isEdit ? '/api/customers/' + encodeURIComponent(origEmail) : '/api/customers';
   const r = await apiFetch(url, {method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
-  if (r.ok) { toast(id ? 'Customer updated!' : 'Customer created!'); hideCustomerForm(); loadCustomers(); loadStats(); }
+  if (r.ok) { toast(isEdit ? 'Customer updated!' : 'Customer created!'); hideCustomerForm(); loadCustomers(); loadStats(); }
   else { const e = await r.json(); toast(e.error || 'Error', 'error'); }
 }
 
-async function editCustomer(id) {
-  const r = await apiFetch('/api/customers/' + id);
+async function editCustomer(email) {
+  const r = await apiFetch('/api/customers/' + encodeURIComponent(email));
   const c = await r.json();
   showCustomerForm();
   document.getElementById('customer-form-title').textContent = 'Edit Customer';
-  document.getElementById('cf-id').value = c.id;
+  document.getElementById('cf-email-orig').value = c.email;
   document.getElementById('cf-firstname').value = c.firstname;
   document.getElementById('cf-lastname').value = c.lastname;
   document.getElementById('cf-email').value = c.email;
@@ -892,9 +850,9 @@ async function editCustomer(id) {
   document.getElementById('cf-zipcode').value = c.zipcode || '';
 }
 
-async function deleteCustomer(id, name) {
+async function deleteCustomer(email, name) {
   if (!confirm(`Delete customer "${name}"? Their orders will also be deleted.`)) return;
-  const r = await apiFetch('/api/customers/' + id, {method:'DELETE'});
+  const r = await apiFetch('/api/customers/' + encodeURIComponent(email), {method:'DELETE'});
   if (r.ok) { toast('Customer deleted!'); loadCustomers(); loadStats(); }
   else { toast('Error deleting customer', 'error'); }
 }
@@ -919,14 +877,16 @@ async function loadOrders(search='') {
     }).join(' ');
     return `
       <tr>
-        <td><strong>#${o.order_number || ''}</strong></td>
+        <td><span class="order-num">#${o.order_number}</span></td>
         <td>${(o.date||'').substring(0,10)}</td>
-        <td><span class="badge badge-purple" style="cursor:pointer" onclick="showReassignModal('${o.id}','${o.customer_name || ''}')">${o.customer_name || o.customer_id.substring(0,8) + '…'}</span></td>
+        <td>${(o.shipped_date||'—').substring(0,10)}</td>
+        <td><span class="badge badge-purple" style="cursor:pointer" onclick="showReassignModal(${o.order_number},'${esc(o.customer_name || '')}')">${esc(o.customer_name || '')}</span><br><span style="color:var(--text2);font-size:0.75rem">${esc(o.customer_email || '')}</span></td>
         <td>${itemChips}</td>
+        <td>${(o.delivery_date||'—').substring(0,10)}</td>
         <td class="order-total">$${total.toFixed(2)}</td>
         <td class="btn-group">
-          <button class="btn btn-purple btn-sm" onclick="showReassignModal('${o.id}','${o.customer_name || ''}')">🔗</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteOrder('${o.id}')">🗑️</button>
+          <button class="btn btn-purple btn-sm" onclick="showReassignModal(${o.order_number},'${esc(o.customer_name || '')}')">🔗</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteOrder(${o.order_number})">🗑️</button>
         </td>
       </tr>
     `;
@@ -943,8 +903,10 @@ async function showOrderForm() {
   document.getElementById('order-form').classList.remove('hidden');
   const customers = await (await apiFetch('/api/customers')).json();
   const sel = document.getElementById('of-customer');
-  sel.innerHTML = '<option value="">— Select customer —</option>' + customers.map(c => `<option value="${c.id}">${c.firstname} ${c.lastname}</option>`).join('');
+  sel.innerHTML = '<option value="">— Select customer —</option>' + customers.map(c => `<option value="${c.email}">${c.firstname} ${c.lastname} (${c.email})</option>`).join('');
   document.getElementById('of-date').value = new Date().toISOString().substring(0,16);
+  document.getElementById('of-shipped').value = '';
+  document.getElementById('of-delivery').value = '';
   document.getElementById('order-items').innerHTML = '';
   addOrderItem();
 }
@@ -966,9 +928,11 @@ async function addOrderItem() {
 }
 
 async function saveOrder() {
-  const customer_id = document.getElementById('of-customer').value;
-  if (!customer_id) { toast('Select a customer', 'error'); return; }
+  const customer_email = document.getElementById('of-customer').value;
+  if (!customer_email) { toast('Select a customer', 'error'); return; }
   const date = document.getElementById('of-date').value;
+  const shipped_date = document.getElementById('of-shipped').value || null;
+  const delivery_date = document.getElementById('of-delivery').value || null;
   const items = [];
   document.querySelectorAll('#order-items > div').forEach(row => {
     const pid = row.querySelector('.oi-product').value;
@@ -978,41 +942,41 @@ async function saveOrder() {
   if (!items.length) { toast('Add at least one item', 'error'); return; }
   const r = await apiFetch('/api/orders', {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({customer_id, date, products: items})
+    body: JSON.stringify({customer_email, date, shipped_date, delivery_date, products: items})
   });
   if (r.ok) { toast('Order created!'); hideOrderForm(); loadOrders(); loadStats(); }
   else { const e = await r.json(); toast(e.error || 'Error', 'error'); }
 }
 
-async function deleteOrder(id) {
+async function deleteOrder(orderNumber) {
   if (!confirm('Delete this order?')) return;
-  const r = await apiFetch('/api/orders/' + id, {method:'DELETE'});
+  const r = await apiFetch('/api/orders/' + orderNumber, {method:'DELETE'});
   if (r.ok) { toast('Order deleted!'); loadOrders(); loadStats(); }
   else { toast('Error deleting order', 'error'); }
 }
 
 // ─── Reassign Customer Modal ───
-let reassignOrderId = null;
-async function showReassignModal(oid, currentName) {
-  reassignOrderId = oid;
-  document.getElementById('reassign-modal-desc').textContent = `Reassign order ${oid.substring(0,8)}… from ${currentName} to a different customer`;
+let reassignOrderNumber = null;
+async function showReassignModal(orderNumber, currentName) {
+  reassignOrderNumber = orderNumber;
+  document.getElementById('reassign-modal-desc').textContent = `Reassign order #${orderNumber} from ${currentName} to a different customer`;
   const customers = await (await apiFetch('/api/customers')).json();
   const sel = document.getElementById('reassign-customer-select');
   sel.innerHTML = '<option value="">— Select a customer —</option>' + customers.map(c =>
-    `<option value="${c.id}">${c.firstname} ${c.lastname} (@${c.username})</option>`
+    `<option value="${c.email}">${c.firstname} ${c.lastname} (${c.email})</option>`
   ).join('');
   document.getElementById('reassign-modal').classList.remove('hidden');
 }
 function hideReassignModal() { document.getElementById('reassign-modal').classList.add('hidden'); }
 
 async function reassignOrder() {
-  const cid = document.getElementById('reassign-customer-select').value;
-  if (!cid) { toast('Select a customer', 'error'); return; }
-  const r = await apiFetch('/api/orders/' + reassignOrderId + '/customer', {
+  const email = document.getElementById('reassign-customer-select').value;
+  if (!email) { toast('Select a customer', 'error'); return; }
+  const r = await apiFetch('/api/orders/' + reassignOrderNumber + '/customer', {
     method: 'PUT', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({customer_id: cid})
+    body: JSON.stringify({customer_email: email})
   });
-  if (r.ok) { toast('Order reassigned!'); hideReassignModal(); loadOrders(); if (selectedCustomerId) showCustomerDetail(selectedCustomerId); }
+  if (r.ok) { toast('Order reassigned!'); hideReassignModal(); loadOrders(); if (selectedCustomerEmail) showCustomerDetail(selectedCustomerEmail); }
   else { const e = await r.json(); toast(e.error || 'Error', 'error'); }
 }
 
@@ -1025,7 +989,7 @@ async function toggleBatchCustSelect() {
     const customers = await (await apiFetch('/api/customers')).json();
     document.getElementById('batch-cust-checks').innerHTML = customers.map(c =>
       `<label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:0.85rem;cursor:pointer">
-        <input type="checkbox" class="batch-cust-check" value="${c.id}"> ${c.firstname} ${c.lastname} (@${c.username})
+        <input type="checkbox" class="batch-cust-check" value="${c.email}"> ${c.firstname} ${c.lastname} (${c.email})
       </label>`
     ).join('');
   } else { wrap.classList.add('hidden'); }
@@ -1057,7 +1021,7 @@ async function batchCreateOrders() {
   if (mode === 'specific') {
     const checked = [...document.querySelectorAll('.batch-cust-check:checked')].map(cb => cb.value);
     if (!checked.length) { toast('Select at least one customer', 'error'); return; }
-    body.link_customer_ids = checked;
+    body.link_customer_emails = checked;
   } else if (mode === 'with_new') {
     const custCount = Math.min(count, 100);
     const custR = await apiFetch('/api/customers/batch', {
@@ -1065,9 +1029,9 @@ async function batchCreateOrders() {
     });
     if (custR.ok) {
       const newCustomers = await custR.json();
-      const newIds = newCustomers.map(c => c.id);
-      body.link_customer_ids = newIds;
-      toast(`Created ${newIds.length} linked customers, now creating ${count} orders...`);
+      const newEmails = newCustomers.map(c => c.email);
+      body.link_customer_emails = newEmails;
+      toast(`Created ${newEmails.length} linked customers, now creating ${count} orders...`);
     } else { toast('Error creating linked customers', 'error'); return; }
   }
 
@@ -1080,10 +1044,10 @@ async function batchCreateOrders() {
     const modeLabel = mode === 'with_new' ? ' (linked to new customers)' : mode === 'specific' ? ' (linked to selected customers)' : '';
     document.getElementById('batch-log-body').innerHTML = `
       <h3 style="margin-bottom:8px">✅ Generated ${orders.length} Orders${modeLabel}</h3>
-      <table><thead><tr><th>#</th><th>Customer</th><th>Date</th><th>Items</th></tr></thead><tbody>
+      <table><thead><tr><th>Order #</th><th>Customer</th><th>Date</th><th>Items</th></tr></thead><tbody>
       ${orders.slice(0,20).map(o => `<tr>
-        <td><strong>#${o.order_number || '?'}</strong></td>
-        <td>${o.customer_name || o.customer_id.substring(0,8) + '…'}</td>
+        <td><span class="order-num">#${o.order_number || '?'}</span></td>
+        <td>${o.customer_name || o.customer_email}</td>
         <td>${o.date.substring(0,10)}</td>
         <td>${o.items.length} items</td>
       </tr>`).join('')}
@@ -1173,8 +1137,7 @@ async function createApiKey() {
     document.getElementById('new-key-display').classList.remove('hidden');
     loadApiKeys();
   } else {
-    const e = await r.json();
-    toast(e.error || 'Error creating key', 'error');
+    const e = await r.json(); toast(e.error || 'Error creating key', 'error');
   }
 }
 
