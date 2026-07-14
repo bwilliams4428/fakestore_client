@@ -187,11 +187,12 @@
       </div>
     </div>
 
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
     <div class="card">
       <div class="card-header"><h2>Customers</h2><span id="customer-count"></span></div>
       <div class="card-body table-wrap">
         <table>
-          <thead><tr><th>Name</th><th>Email</th><th>Username</th><th>City</th><th>Order #</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Name</th><th>Email</th><th>Order #</th><th>Actions</th></tr></thead>
           <tbody id="customers-tbody"></tbody>
         </table>
       </div>
@@ -211,6 +212,7 @@
           <p style="color:var(--text2)">No orders yet.</p>
         </div>
       </div>
+    </div>
     </div>
   </div>
 
@@ -698,14 +700,11 @@ async function loadCustomers(search='') {
   document.getElementById('customer-count').textContent = `${allCustomers.length} total`;
   const tbody = document.getElementById('customers-tbody');
   tbody.innerHTML = allCustomers.map(c => `
-    <tr>
+    <tr style="cursor:pointer" onclick="showCustomerDetail('${esc(c.email)}')">
       <td><strong>${esc(c.firstname)} ${esc(c.lastname)}</strong></td>
-      <td>${esc(c.email)}</td>
-      <td><span class="badge badge-blue">@${esc(c.username)}</span></td>
-      <td>${esc(c.city) || '—'}</td>
-      <td>${(c.order_numbers && c.order_numbers.length) ? c.order_numbers.map(n => `<span class="badge badge-cyan" style="cursor:pointer;margin:1px" onclick="showCustomerDetail('${esc(c.email)}')">#${n}</span>`).join(' ') : '<span style="color:var(--text2)">—</span>'}</td>
-      <td class="btn-group">
-        <button class="btn btn-purple btn-sm" onclick="showCustomerDetail('${esc(c.email)}')">🔗 Orders</button>
+      <td style="font-size:0.8rem">${esc(c.email)}</td>
+      <td>${(c.order_numbers && c.order_numbers.length) ? c.order_numbers.map(n => `<span class="badge badge-cyan" style="margin:1px">#${n}</span>`).join(' ') : '<span style="color:var(--text2)">—</span>'}</td>
+      <td class="btn-group" onclick="event.stopPropagation()">
         <button class="btn btn-secondary btn-sm" onclick="editCustomer('${esc(c.email)}')">✏️</button>
         <button class="btn btn-danger btn-sm" onclick="deleteCustomer('${esc(c.email)}', '${esc(c.firstname)} ${esc(c.lastname)}')">🗑️</button>
       </td>
@@ -718,9 +717,13 @@ function esc(s) { return (s||'').replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
 // ─── Customer Detail (linked orders) ───
 async function showCustomerDetail(email) {
   selectedCustomerEmail = email;
+  // Highlight selected row
+  document.querySelectorAll('#customers-tbody tr').forEach(tr => tr.style.background = '');
+  const rows = document.querySelectorAll('#customers-tbody tr');
+  rows.forEach(tr => { if (tr.querySelector('td strong') && tr.innerHTML.includes(email.replace(/'/g, "\\'"))) tr.style.background = '#eff6ff'; });
   const r = await apiFetch('/api/customers/' + encodeURIComponent(email));
   const c = await r.json();
-  document.getElementById('cd-name').textContent = `📦 Orders for ${c.firstname} ${c.lastname}`;
+  document.getElementById('cd-name').textContent = `📦 ${c.firstname} ${c.lastname}`;
   const orders = await (await apiFetch('/api/customers/' + encodeURIComponent(email) + '/orders')).json();
   const products = await loadProducts();
   const container = document.getElementById('cd-orders');
@@ -751,10 +754,12 @@ async function showCustomerDetail(email) {
     </tbody></table>`;
   }
   document.getElementById('customer-detail').classList.remove('hidden');
-  loadCustomers();
 }
 
-function hideCustomerDetail() { document.getElementById('customer-detail').classList.add('hidden'); }
+function hideCustomerDetail() {
+  document.getElementById('customer-detail').classList.add('hidden');
+  document.querySelectorAll('#customers-tbody tr').forEach(tr => tr.style.background = '');
+}
 
 async function unlinkOrder(orderNumber, email) {
   if (!confirm('This will delete the order. Continue?')) return;
