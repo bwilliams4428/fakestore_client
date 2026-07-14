@@ -189,7 +189,7 @@
       <div class="card-header"><h2>Customers</h2><span id="customer-count"></span></div>
       <div class="card-body table-wrap">
         <table>
-          <thead><tr><th>Name</th><th>Email</th><th>Username</th><th>City</th><th>Orders</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Name</th><th>Email</th><th>Username</th><th>City</th><th>Order #</th><th>Actions</th></tr></thead>
           <tbody id="customers-tbody"></tbody>
         </table>
       </div>
@@ -701,7 +701,7 @@ async function loadCustomers(search='') {
       <td>${esc(c.email)}</td>
       <td><span class="badge badge-blue">@${esc(c.username)}</span></td>
       <td>${esc(c.city) || '—'}</td>
-      <td><span class="badge badge-green" style="cursor:pointer" onclick="showCustomerDetail('${esc(c.email)}')">📦 ${c.order_count || 0}</span></td>
+      <td>${(c.order_numbers && c.order_numbers.length) ? c.order_numbers.map(n => `<span class="badge badge-cyan" style="cursor:pointer;margin:1px" onclick="showCustomerDetail('${esc(c.email)}')">#${n}</span>`).join(' ') : '<span style="color:var(--text2)">—</span>'}</td>
       <td class="btn-group">
         <button class="btn btn-purple btn-sm" onclick="showCustomerDetail('${esc(c.email)}')">🔗 Orders</button>
         <button class="btn btn-secondary btn-sm" onclick="editCustomer('${esc(c.email)}')">✏️</button>

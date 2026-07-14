@@ -788,14 +788,25 @@ def create_app() -> Flask:
                    GROUP BY c.email
                    ORDER BY c.created_at DESC""",
             )
-        return jsonify([row_to_dict(r) for r in rows])
+        result = []
+        for r in rows:
+            d = row_to_dict(r)
+            email = d["email"]
+            onums = db_fetchall(db, "SELECT order_number FROM orders WHERE customer_email = ? ORDER BY order_number", (email,))
+            d["order_numbers"] = [r2["order_number"] if isinstance(r2, dict) else r2[0] for r2 in onums]
+            result.append(d)
+        return jsonify(result)
 
     @app.route("/api/customers/<path:email>", methods=["GET"])
     def get_customer(email: str):
-        row = db_fetchone(get_db(), "SELECT * FROM customers WHERE email = ?", (email,))
+        db = get_db()
+        row = db_fetchone(db, "SELECT * FROM customers WHERE email = ?", (email,))
         if row is None:
             return jsonify({"error": "Customer not found"}), 404
-        return jsonify(row_to_dict(row))
+        d = row_to_dict(row)
+        onums = db_fetchall(db, "SELECT order_number FROM orders WHERE customer_email = ? ORDER BY order_number", (email,))
+        d["order_numbers"] = [r["order_number"] if isinstance(r, dict) else r[0] for r in onums]
+        return jsonify(d)
 
     @app.route("/api/customers", methods=["POST"])
     def create_customer():
