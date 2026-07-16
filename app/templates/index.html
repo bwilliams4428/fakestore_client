@@ -238,8 +238,15 @@
             <select id="of-customer"><option value="">— Select customer —</option></select>
           </div>
           <div class="field"><label>Order Date</label><input id="of-date" type="datetime-local"></div>
-          <div class="field"><label>Shipped Date</label><input id="of-shipped" type="date"></div>
-          <div class="field"><label>Delivery Date</label><input id="of-delivery" type="date"></div>
+          <div class="field"><label>Status</label>
+            <select id="of-status" onchange="toggleShippedFields()">
+              <option value="not shipped">Not Shipped</option>
+              <option value="shipped">Shipped</option>
+            </select>
+          </div>
+          <div class="field" id="of-tracking-wrap" style="display:none"><label>Tracking URL</label><input id="of-tracking" type="url" placeholder="https://track.carrier.com/..."></div>
+          <div class="field" id="of-shipped-wrap" style="display:none"><label>Shipped Date</label><input id="of-shipped" type="date"></div>
+          <div class="field" id="of-delivery-wrap" style="display:none"><label>Delivery Date</label><input id="of-delivery" type="date"></div>
         </div>
         <div style="margin-top:16px">
           <h3 style="font-size:0.9rem;margin-bottom:8px;color:var(--text2)">Order Items</h3>
@@ -258,7 +265,7 @@
       <div class="card-header"><h2>Orders</h2><span id="order-count"></span></div>
       <div class="card-body table-wrap">
         <table>
-          <thead><tr><th>Order #</th><th>Date</th><th>Shipped</th><th>Customer</th><th>Items</th><th>Delivery</th><th>Total</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Order #</th><th>Date</th><th>Status</th><th>Customer</th><th>Items</th><th>Tracking</th><th>Total</th><th>Actions</th></tr></thead>
           <tbody id="orders-tbody"></tbody>
         </table>
       </div>
@@ -477,6 +484,8 @@
   -d '{
     "customer_email": "john@gmail.com",
     "date": "2024-07-01T12:00:00",
+    "status": "shipped",
+    "tracking_url": "https://track.carrier.com/1Z999AA10123456784",
     "shipped_date": "2024-07-03",
     "delivery_date": "2024-07-08",
     "products": [
@@ -886,7 +895,7 @@ async function showCustomerDetail(email) {
   if (!orders.length) {
     container.innerHTML = '<p style="color:var(--text2)">No orders yet.</p>';
   } else {
-    container.innerHTML = `<table><thead><tr><th>Order #</th><th>Date</th><th>Shipped</th><th>Items</th><th>Delivery</th><th>Total</th><th>Actions</th></tr></thead><tbody>
+    container.innerHTML = `<table><thead><tr><th>Order #</th><th>Date</th><th>Status</th><th>Items</th><th>Tracking</th><th>Total</th><th>Actions</th></tr></thead><tbody>
     ${orders.map(o => {
       const total = (o.products || []).reduce((s, item) => {
         const p = products.find(p => p.id === item.product_id);
@@ -897,12 +906,18 @@ async function showCustomerDetail(email) {
         const title = p ? (p.title.length > 20 ? p.title.substring(0,20) + '…' : p.title) : '#' + item.product_id;
         return `<span class="product-chip">${title} <span class="qty">×${item.quantity}</span></span>`;
       }).join(' ');
+      const statusBadge = o.status === 'shipped'
+        ? '<span class="badge badge-green">Shipped</span>'
+        : '<span class="badge badge-orange">Not Shipped</span>';
+      const trackingCell = o.tracking_url
+        ? `<a href="${esc(o.tracking_url)}" target="_blank" style="color:var(--cyan);font-size:0.8rem">Track ↗</a>`
+        : '<span style="color:var(--text2)">—</span>';
       return `<tr style="cursor:pointer" onclick="showOrderDetail(${o.order_number},'${esc(email)}')">
         <td><span class="order-num">#${o.order_number}</span></td>
         <td>${(o.date||'').substring(0,10)}</td>
-        <td>${(o.shipped_date||'—').substring(0,10)}</td>
+        <td>${statusBadge}</td>
         <td>${chips}</td>
-        <td>${(o.delivery_date||'—').substring(0,10)}</td>
+        <td>${trackingCell}</td>
         <td class="order-total">$${total.toFixed(2)}</td>
         <td onclick="event.stopPropagation()"><button class="btn btn-danger btn-sm" onclick="unlinkOrder(${o.order_number},'${esc(email)}')">✕ Unlink</button></td>
       </tr>`;
@@ -940,8 +955,10 @@ async function showOrderDetail(orderNumber, email) {
       <div><span style="color:var(--text2)">Order #</span><br><strong class="order-num">#${o.order_number}</strong></div>
       <div><span style="color:var(--text2)">Customer</span><br><strong>${esc(o.customer_name || email)}</strong></div>
       <div><span style="color:var(--text2)">Date</span><br>${(o.date||'').substring(0,10)}</div>
-      <div><span style="color:var(--text2)">Shipped</span><br>${(o.shipped_date||'—').substring(0,10)}</div>
-      <div><span style="color:var(--text2)">Delivery</span><br>${(o.delivery_date||'—').substring(0,10)}</div>
+      <div><span style="color:var(--text2)">Status</span><br>${o.status === 'shipped' ? '<span class="badge badge-green">Shipped</span>' : '<span class="badge badge-orange">Not Shipped</span>'}</div>
+      ${o.status === 'shipped' ? `<div><span style="color:var(--text2)">Shipped</span><br>${(o.shipped_date||'—').substring(0,10)}</div>` : ''}
+      ${o.status === 'shipped' ? `<div><span style="color:var(--text2)">Delivery</span><br>${(o.delivery_date||'—').substring(0,10)}</div>` : ''}
+      ${o.tracking_url ? `<div><span style="color:var(--text2)">Tracking</span><br><a href="${esc(o.tracking_url)}" target="_blank" style="color:var(--cyan)">${esc(o.tracking_url.length > 40 ? o.tracking_url.substring(0,40) + '…' : o.tracking_url)}</a></div>` : ''}
       <div><span style="color:var(--text2)">Total</span><br><strong class="order-total">$${total.toFixed(2)}</strong></div>
     </div>
     <table><thead><tr><th>Item</th><th>Price</th><th>Qty</th><th>Subtotal</th></tr></thead><tbody>${itemsHtml}</tbody></table>`;
@@ -1081,10 +1098,10 @@ async function loadOrders(search='') {
       <tr>
         <td><span class="order-num">#${o.order_number}</span></td>
         <td>${(o.date||'').substring(0,10)}</td>
-        <td>${(o.shipped_date||'—').substring(0,10)}</td>
+        <td>${o.status === 'shipped' ? '<span class="badge badge-green">Shipped</span>' : '<span class="badge badge-orange">Not Shipped</span>'}</td>
         <td><span class="badge badge-purple" style="cursor:pointer" onclick="showReassignModal(${o.order_number},'${esc(o.customer_name || '')}')">${esc(o.customer_name || '')}</span><br><span style="color:var(--text2);font-size:0.75rem">${esc(o.customer_email || '')}</span></td>
         <td>${itemChips}</td>
-        <td>${(o.delivery_date||'—').substring(0,10)}</td>
+        <td>${o.tracking_url ? `<a href="${esc(o.tracking_url)}" target="_blank" style="color:var(--cyan);font-size:0.8rem">Track ↗</a>` : '<span style="color:var(--text2)">—</span>'}</td>
         <td class="order-total">$${total.toFixed(2)}</td>
         <td class="btn-group">
           <button class="btn btn-purple btn-sm" onclick="showReassignModal(${o.order_number},'${esc(o.customer_name || '')}')">🔗</button>
@@ -1107,12 +1124,28 @@ async function showOrderForm() {
   const sel = document.getElementById('of-customer');
   sel.innerHTML = '<option value="">— Select customer —</option>' + customers.map(c => `<option value="${c.email}">${c.firstname} ${c.lastname} (${c.email})</option>`).join('');
   document.getElementById('of-date').value = new Date().toISOString().substring(0,16);
+  document.getElementById('of-status').value = 'not shipped';
+  document.getElementById('of-tracking').value = '';
   document.getElementById('of-shipped').value = '';
   document.getElementById('of-delivery').value = '';
+  toggleShippedFields();
   document.getElementById('order-items').innerHTML = '';
   addOrderItem();
 }
 function hideOrderForm() { document.getElementById('order-form').classList.add('hidden'); }
+
+function toggleShippedFields() {
+  const status = document.getElementById('of-status').value;
+  const show = status === 'shipped';
+  document.getElementById('of-tracking-wrap').style.display = show ? '' : 'none';
+  document.getElementById('of-shipped-wrap').style.display = show ? '' : 'none';
+  document.getElementById('of-delivery-wrap').style.display = show ? '' : 'none';
+  if (!show) {
+    document.getElementById('of-tracking').value = '';
+    document.getElementById('of-shipped').value = '';
+    document.getElementById('of-delivery').value = '';
+  }
+}
 
 async function addOrderItem() {
   const products = await loadProducts();
@@ -1133,8 +1166,10 @@ async function saveOrder() {
   const customer_email = document.getElementById('of-customer').value;
   if (!customer_email) { toast('Select a customer', 'error'); return; }
   const date = document.getElementById('of-date').value;
-  const shipped_date = document.getElementById('of-shipped').value || null;
-  const delivery_date = document.getElementById('of-delivery').value || null;
+  const status = document.getElementById('of-status').value;
+  const tracking_url = status === 'shipped' ? (document.getElementById('of-tracking').value || null) : null;
+  const shipped_date = status === 'shipped' ? (document.getElementById('of-shipped').value || null) : null;
+  const delivery_date = status === 'shipped' ? (document.getElementById('of-delivery').value || null) : null;
   const items = [];
   document.querySelectorAll('#order-items > div').forEach(row => {
     const pid = row.querySelector('.oi-product').value;
@@ -1144,7 +1179,7 @@ async function saveOrder() {
   if (!items.length) { toast('Add at least one item', 'error'); return; }
   const r = await apiFetch('/api/orders', {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({customer_email, date, shipped_date, delivery_date, products: items})
+    body: JSON.stringify({customer_email, date, status, tracking_url, shipped_date, delivery_date, products: items})
   });
   if (r.ok) { toast('Order created!'); hideOrderForm(); loadOrders(); loadStats(); }
   else { const e = await r.json(); toast(e.error || 'Error', 'error'); }

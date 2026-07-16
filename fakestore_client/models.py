@@ -108,6 +108,10 @@ class Order(BaseModel):
     userId: int
     date: str  # ISO-8601 date string, e.g. "2020-03-02T00:00:00.000Z"
     products: list[CartItem] = []
+    status: str = "not shipped"  # "shipped" or "not shipped"
+    tracking_url: Optional[str] = None
+    shipped_date: Optional[str] = None
+    delivery_date: Optional[str] = None
     version: Optional[int] = Field(None, alias="__v")
 
     model_config = {"populate_by_name": True}
@@ -119,6 +123,10 @@ class OrderCreate(BaseModel):
     userId: int
     date: str
     products: list[CartItem] = []
+    status: str = "not shipped"
+    tracking_url: Optional[str] = None
+    shipped_date: Optional[str] = None
+    delivery_date: Optional[str] = None
 
 
 class OrderUpdate(BaseModel):
@@ -127,6 +135,10 @@ class OrderUpdate(BaseModel):
     userId: Optional[int] = None
     date: Optional[str] = None
     products: Optional[list[CartItem]] = None
+    status: Optional[str] = None
+    tracking_url: Optional[str] = None
+    shipped_date: Optional[str] = None
+    delivery_date: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------

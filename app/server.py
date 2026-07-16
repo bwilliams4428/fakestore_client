@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS orders (
     order_number  INTEGER PRIMARY KEY,
     customer_email TEXT NOT NULL REFERENCES customers(email) ON DELETE CASCADE,
     date          TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'not shipped',
+    tracking_url  TEXT,
     shipped_date  TEXT,
     delivery_date TEXT,
     created_at    TEXT NOT NULL DEFAULT (datetime('now'))
@@ -122,6 +124,8 @@ CREATE TABLE IF NOT EXISTS orders (
     order_number  SERIAL PRIMARY KEY,
     customer_email TEXT NOT NULL REFERENCES customers(email) ON DELETE CASCADE,
     date          TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'not shipped',
+    tracking_url  TEXT,
     shipped_date  TEXT,
     delivery_date TEXT,
     created_at    TIMESTAMP NOT NULL DEFAULT NOW()
@@ -234,6 +238,28 @@ def _needs_migration(db, db_type: str) -> bool:
         return False
 
 
+def _add_order_columns(db, db_type: str) -> None:
+    """Add status and tracking_url columns to orders table if missing (migration)."""
+    if db_type == "sqlite":
+        cols = [r[1] for r in db.execute("PRAGMA table_info(orders)").fetchall()]
+        if "status" not in cols:
+            db.execute("ALTER TABLE orders ADD COLUMN status TEXT NOT NULL DEFAULT 'not shipped'")
+        if "tracking_url" not in cols:
+            db.execute("ALTER TABLE orders ADD COLUMN tracking_url TEXT")
+    else:
+        cur = db.cursor()
+        cur.execute("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'orders' AND column_name IN ('status', 'tracking_url')
+        """)
+        existing = {r[0] for r in cur.fetchall()}
+        if "status" not in existing:
+            cur.execute("ALTER TABLE orders ADD COLUMN status TEXT NOT NULL DEFAULT 'not shipped'")
+        if "tracking_url" not in existing:
+            cur.execute("ALTER TABLE orders ADD COLUMN tracking_url TEXT")
+        db.commit()
+
+
 def _run_migration(db, db_type: str) -> None:
     """Drop old tables and let them be recreated with the new schema."""
     print("🔄 Migrating database: dropping old tables with legacy schema...")
@@ -270,6 +296,9 @@ def init_db() -> None:
         cur = db.cursor()
         cur.execute(SCHEMA_POSTGRES)
         db.commit()
+
+    # Add new columns to existing orders table (migration)
+    _add_order_columns(db, db_type)
 
     # Handle master API key
     global MASTER_API_KEY
@@ -436,13 +465,13 @@ _FALLBACK_CUSTOMERS = [
 ]
 
 _FALLBACK_ORDERS = [
-    {"order_number": 10001, "customer_email": "john@gmail.com", "date": "2024-01-15", "shipped_date": "2024-01-17", "delivery_date": "2024-01-22", "items": [{"productId": 1, "quantity": 4}]},
-    {"order_number": 10002, "customer_email": "morrison@gmail.com", "date": "2024-02-03", "shipped_date": "2024-02-05", "delivery_date": "2024-02-10", "items": [{"productId": 2, "quantity": 1}, {"productId": 4, "quantity": 5}]},
-    {"order_number": 10003, "customer_email": "kevin@gmail.com", "date": "2024-03-11", "shipped_date": "2024-03-13", "delivery_date": "2024-03-18", "items": [{"productId": 3, "quantity": 1}, {"productId": 2, "quantity": 3}]},
-    {"order_number": 10004, "customer_email": "don@gmail.com", "date": "2024-04-22", "shipped_date": "2024-04-24", "delivery_date": "2024-04-29", "items": [{"productId": 4, "quantity": 4}, {"productId": 5, "quantity": 2}]},
-    {"order_number": 10005, "customer_email": "derek@gmail.com", "date": "2024-05-08", "shipped_date": "2024-05-10", "delivery_date": "2024-05-15", "items": [{"productId": 7, "quantity": 1}, {"productId": 8, "quantity": 1}]},
-    {"order_number": 10006, "customer_email": "david_r@gmail.com", "date": "2024-06-19", "shipped_date": "2024-06-21", "delivery_date": "2024-06-26", "items": [{"productId": 10, "quantity": 4}, {"productId": 1, "quantity": 2}]},
-    {"order_number": 10007, "customer_email": "miriam@snyder.com", "date": "2024-07-04", "shipped_date": "2024-07-06", "delivery_date": "2024-07-11", "items": [{"productId": 9, "quantity": 3}, {"productId": 14, "quantity": 1}]},
+    {"order_number": 10001, "customer_email": "john@gmail.com", "date": "2024-01-15", "status": "shipped", "tracking_url": "https://track.carrier.com/1Z999AA10123456784", "shipped_date": "2024-01-17", "delivery_date": "2024-01-22", "items": [{"productId": 1, "quantity": 4}]},
+    {"order_number": 10002, "customer_email": "morrison@gmail.com", "date": "2024-02-03", "status": "shipped", "tracking_url": "https://track.carrier.com/1Z999AA10123456785", "shipped_date": "2024-02-05", "delivery_date": "2024-02-10", "items": [{"productId": 2, "quantity": 1}, {"productId": 4, "quantity": 5}]},
+    {"order_number": 10003, "customer_email": "kevin@gmail.com", "date": "2024-03-11", "status": "shipped", "tracking_url": "https://track.carrier.com/1Z999AA10123456786", "shipped_date": "2024-03-13", "delivery_date": "2024-03-18", "items": [{"productId": 3, "quantity": 1}, {"productId": 2, "quantity": 3}]},
+    {"order_number": 10004, "customer_email": "don@gmail.com", "date": "2024-04-22", "status": "not shipped", "items": [{"productId": 4, "quantity": 4}, {"productId": 5, "quantity": 2}]},
+    {"order_number": 10005, "customer_email": "derek@gmail.com", "date": "2024-05-08", "status": "shipped", "tracking_url": "https://track.carrier.com/1Z999AA10123456788", "shipped_date": "2024-05-10", "delivery_date": "2024-05-15", "items": [{"productId": 7, "quantity": 1}, {"productId": 8, "quantity": 1}]},
+    {"order_number": 10006, "customer_email": "david_r@gmail.com", "date": "2024-06-19", "status": "not shipped", "items": [{"productId": 10, "quantity": 4}, {"productId": 1, "quantity": 2}]},
+    {"order_number": 10007, "customer_email": "miriam@snyder.com", "date": "2024-07-04", "status": "shipped", "tracking_url": "https://track.carrier.com/1Z999AA10123456790", "shipped_date": "2024-07-06", "delivery_date": "2024-07-11", "items": [{"productId": 9, "quantity": 3}, {"productId": 14, "quantity": 1}]},
 ]
 
 
@@ -478,10 +507,14 @@ def _insert_seed_data(db, db_type, products, customers, orders):
             )
 
     for o in orders:
+        status = o.get("status", "not shipped")
+        tracking_url = o.get("tracking_url") if status == "shipped" else None
+        shipped_date = o.get("shipped_date") if status == "shipped" else None
+        delivery_date = o.get("delivery_date") if status == "shipped" else None
         if db_type == "sqlite":
             db.execute(
-                f"INSERT {ignore} INTO orders (order_number, customer_email, date, shipped_date, delivery_date) VALUES ({ph}, {ph}, {ph}, {ph}, {ph})",
-                (o["order_number"], o["customer_email"], o["date"], o.get("shipped_date"), o.get("delivery_date")),
+                f"INSERT {ignore} INTO orders (order_number, customer_email, date, status, tracking_url, shipped_date, delivery_date) VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})",
+                (o["order_number"], o["customer_email"], o["date"], status, tracking_url, shipped_date, delivery_date),
             )
             for item in o["items"]:
                 db.execute(
@@ -490,8 +523,8 @@ def _insert_seed_data(db, db_type, products, customers, orders):
                 )
         else:
             db.cursor().execute(
-                f"INSERT INTO orders (order_number, customer_email, date, shipped_date, delivery_date) VALUES ({ph}, {ph}, {ph}, {ph}, {ph}) ON CONFLICT (order_number) DO NOTHING",
-                (o["order_number"], o["customer_email"], o["date"], o.get("shipped_date"), o.get("delivery_date")),
+                f"INSERT INTO orders (order_number, customer_email, date, status, tracking_url, shipped_date, delivery_date) VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}) ON CONFLICT (order_number) DO NOTHING",
+                (o["order_number"], o["customer_email"], o["date"], status, tracking_url, shipped_date, delivery_date),
             )
             for item in o["items"]:
                 db.cursor().execute(
@@ -554,12 +587,24 @@ def seed_if_empty() -> bool:
                     for i, c in enumerate(carts):
                         cust_idx = min((c.get("userId", 1) - 1), len(customers) - 1)
                         order_date = c.get("date", "2024-01-01")
-                        shipped = (datetime.fromisoformat(order_date.replace("Z", "")) + timedelta(days=2)).strftime("%Y-%m-%d") if order_date else None
-                        delivered = (datetime.fromisoformat(order_date.replace("Z", "")) + timedelta(days=7)).strftime("%Y-%m-%d") if order_date else None
+                        # Randomly assign shipped/not shipped status
+                        is_shipped = random.choice([True, False])
+                        if is_shipped:
+                            shipped = (datetime.fromisoformat(order_date.replace("Z", "")) + timedelta(days=2)).strftime("%Y-%m-%d") if order_date else None
+                            delivered = (datetime.fromisoformat(order_date.replace("Z", "")) + timedelta(days=7)).strftime("%Y-%m-%d") if order_date else None
+                            tracking = f"https://track.carrier.com/{uuid.uuid4().hex[:16].upper()}"
+                            status = "shipped"
+                        else:
+                            shipped = None
+                            delivered = None
+                            tracking = None
+                            status = "not shipped"
                         orders.append({
                             "order_number": 10001 + i,
                             "customer_email": customers[cust_idx]["email"],
                             "date": order_date[:10] if order_date else "2024-01-01",
+                            "status": status,
+                            "tracking_url": tracking,
                             "shipped_date": shipped,
                             "delivery_date": delivered,
                             "items": c.get("products", []),
@@ -616,16 +661,32 @@ def generate_fake_order(customer_emails: list[str], product_ids: list[int]) -> d
         items.append({"product_id": pid, "quantity": qty})
 
     order_date = fake.date_time_this_year()
-    shipped = order_date + timedelta(days=random.randint(1, 3))
-    delivered = shipped + timedelta(days=random.randint(2, 7))
 
-    return {
-        "customer_email": random.choice(customer_emails),
-        "date": order_date.strftime("%Y-%m-%dT%H:%M:%S"),
-        "shipped_date": shipped.strftime("%Y-%m-%d"),
-        "delivery_date": delivered.strftime("%Y-%m-%d"),
-        "items": items,
-    }
+    # Randomly assign shipped or not shipped status
+    status = random.choice(["shipped", "not shipped"])
+    if status == "shipped":
+        shipped = order_date + timedelta(days=random.randint(1, 3))
+        delivered = shipped + timedelta(days=random.randint(2, 7))
+        tracking_url = f"https://track.carrier.com/{uuid.uuid4().hex[:16].upper()}"
+        return {
+            "customer_email": random.choice(customer_emails),
+            "date": order_date.strftime("%Y-%m-%dT%H:%M:%S"),
+            "status": status,
+            "tracking_url": tracking_url,
+            "shipped_date": shipped.strftime("%Y-%m-%d"),
+            "delivery_date": delivered.strftime("%Y-%m-%d"),
+            "items": items,
+        }
+    else:
+        return {
+            "customer_email": random.choice(customer_emails),
+            "date": order_date.strftime("%Y-%m-%dT%H:%M:%S"),
+            "status": status,
+            "tracking_url": None,
+            "shipped_date": None,
+            "delivery_date": None,
+            "items": items,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -984,13 +1045,13 @@ def create_app() -> Flask:
             o["order_number"] = onum
             if db_type == "sqlite":
                 db.execute(
-                    "INSERT INTO orders (order_number, customer_email, date, shipped_date, delivery_date) VALUES (?, ?, ?, ?, ?)",
-                    (onum, o["customer_email"], o["date"], o.get("shipped_date"), o.get("delivery_date")),
+                    "INSERT INTO orders (order_number, customer_email, date, status, tracking_url, shipped_date, delivery_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (onum, o["customer_email"], o["date"], o.get("status", "not shipped"), o.get("tracking_url"), o.get("shipped_date"), o.get("delivery_date")),
                 )
             else:
                 db_execute(db,
-                    "INSERT INTO orders (order_number, customer_email, date, shipped_date, delivery_date) VALUES (%s, %s, %s, %s, %s)",
-                    (onum, o["customer_email"], o["date"], o.get("shipped_date"), o.get("delivery_date")),
+                    "INSERT INTO orders (order_number, customer_email, date, status, tracking_url, shipped_date, delivery_date) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (onum, o["customer_email"], o["date"], o.get("status", "not shipped"), o.get("tracking_url"), o.get("shipped_date"), o.get("delivery_date")),
                 )
             for item in o["items"]:
                 if db_type == "sqlite":
@@ -1074,19 +1135,27 @@ def create_app() -> Flask:
         if not customer_email:
             return jsonify({"error": "customer_email is required"}), 400
         date = data.get("date") or datetime.now(timezone.utc).isoformat()
-        shipped_date = data.get("shipped_date")
-        delivery_date = data.get("delivery_date")
+        status = data.get("status", "not shipped")
+        # Only include tracking_url, shipped_date, delivery_date for shipped orders
+        if status == "shipped":
+            tracking_url = data.get("tracking_url")
+            shipped_date = data.get("shipped_date")
+            delivery_date = data.get("delivery_date")
+        else:
+            tracking_url = None
+            shipped_date = None
+            delivery_date = None
         products = data.get("products", data.get("items", []))
         onum = get_next_order_number(db)
         if db_type == "sqlite":
             db.execute(
-                "INSERT INTO orders (order_number, customer_email, date, shipped_date, delivery_date) VALUES (?, ?, ?, ?, ?)",
-                (onum, customer_email, date, shipped_date, delivery_date),
+                "INSERT INTO orders (order_number, customer_email, date, status, tracking_url, shipped_date, delivery_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (onum, customer_email, date, status, tracking_url, shipped_date, delivery_date),
             )
         else:
             db_execute(db,
-                "INSERT INTO orders (order_number, customer_email, date, shipped_date, delivery_date) VALUES (%s, %s, %s, %s, %s)",
-                (onum, customer_email, date, shipped_date, delivery_date),
+                "INSERT INTO orders (order_number, customer_email, date, status, tracking_url, shipped_date, delivery_date) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (onum, customer_email, date, status, tracking_url, shipped_date, delivery_date),
             )
         for item in products:
             pid = item.get("product_id") or item.get("productId")
